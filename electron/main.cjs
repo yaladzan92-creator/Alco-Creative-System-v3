@@ -24,9 +24,9 @@ ipcMain.handle('alco-license-get-device-id', async () => {
   return generateDeviceId();
 });
 
-ipcMain.handle('alco-license-get-request-code', async () => {
+ipcMain.handle('alco-license-get-request-code', async (_event, options = {}) => {
   const deviceId = generateDeviceId();
-  return generateRequestCode(deviceId);
+  return generateRequestCode(deviceId, options);
 });
 
 ipcMain.handle('alco-license-activate', async (_event, licenseKey) => {

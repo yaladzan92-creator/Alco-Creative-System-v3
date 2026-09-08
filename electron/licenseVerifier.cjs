@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const zlib = require('zlib');
+const { execFileSync } = require('child_process');
 
 const TARGET_APP_ID = 'alco-creative-system';
 const EXACT_LICENSE_VERSION = '1.0';
@@ -59,7 +59,7 @@ function getEffectivePublicKey(overrideKey) {
  */
 function validateDeviceId(deviceId) {
   if (!deviceId || typeof deviceId !== 'string') return false;
-  return /^ALCO-DEV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(deviceId);
+  return /^ALCO-DEV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(deviceId.trim());
 }
 
 /**
@@ -67,6 +67,17 @@ function validateDeviceId(deviceId) {
  */
 function getOsMachineId() {
   try {
+    if (process.platform === 'win32') {
+      const output = execFileSync('REG', [
+        'QUERY',
+        'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography',
+        '/v',
+        'MachineGuid'
+      ], { windowsHide: true, timeout: 2000 }).toString();
+      const match = output.match(/MachineGuid\s+REG_SZ\s+(.+)/i);
+      const id = match ? match[1].trim() : '';
+      if (id) return id;
+    }
     if (process.platform === 'linux') {
       if (fs.existsSync('/etc/machine-id')) {
         const id = fs.readFileSync('/etc/machine-id', 'utf8').trim();
@@ -110,14 +121,12 @@ function getPrimaryMac() {
  */
 function generateDeviceId() {
   const machineId = getOsMachineId();
-  const primaryMac = getPrimaryMac();
-  const coreCount = os.cpus()?.length || 1;
+  let hardwareId = machineId;
+  if (!hardwareId) {
+    hardwareId = `${getPrimaryMac()}-${os.arch()}-${os.cpus()[0]?.model || 'cpu'}`;
+  }
 
-  const seed = machineId
-    ? `ALCO|${process.platform}|${process.arch}|${machineId}`
-    : `ALCO|${process.platform}|${process.arch}|${primaryMac}|${coreCount}`;
-
-  const hashHex = crypto.createHash('sha256').update(seed).digest('hex').toUpperCase();
+  const hashHex = crypto.createHash('sha256').update(`ALCO-HW:${hardwareId}:${os.arch()}`).digest('hex').toUpperCase();
   const p1 = hashHex.substring(0, 4);
   const p2 = hashHex.substring(4, 8);
   const p3 = hashHex.substring(8, 12);
@@ -129,93 +138,94 @@ function generateDeviceId() {
  * Matches src/modules/canonical.ts of ALCO License Generator
  */
 function canonicalizeJSON(val, seen = new WeakSet()) {
-  // 1. null
   if (val === null) {
     return 'null';
   }
 
-  // 2. toJSON
-  if (val !== null && typeof val === 'object' && typeof val.toJSON === 'function') {
-    val = val.toJSON();
-    if (val === null) return 'null';
-  }
+  const t = typeof val;
 
-  // 3. undefined, function, symbol at top-level
-  if (val === undefined || typeof val === 'function' || typeof val === 'symbol') {
-    return undefined;
-  }
-
-  // 4. boolean
   if (typeof val === 'boolean') {
     return val ? 'true' : 'false';
   }
 
-  // 5. number: finite numbers only
-  if (typeof val === 'number') {
+  if (t === 'number') {
     if (!Number.isFinite(val)) {
-      throw new TypeError('Canonical error: Numbers must be finite (NaN and Infinity not allowed)');
+      throw new TypeError('Canonical JSON: Cannot serialize non-finite numbers (NaN or Infinity)');
     }
-    return Object.is(val, -0) ? '-0' : JSON.stringify(val);
-  }
-
-  // 6. string: Unicode & escaping
-  if (typeof val === 'string') {
     return JSON.stringify(val);
   }
 
-  // 7. Array
+  if (t === 'string') {
+    return JSON.stringify(val);
+  }
+
   if (Array.isArray(val)) {
     if (seen.has(val)) {
-      throw new TypeError('Canonical error: Circular reference detected in array');
+      throw new TypeError('Canonical JSON: Circular reference detected');
     }
     seen.add(val);
     const items = val.map(item => {
-      if (item === undefined || typeof item === 'function' || typeof item === 'symbol') {
+      if (item === undefined || typeof item === 'symbol' || typeof item === 'function') {
         return 'null';
       }
-      const serialized = canonicalizeJSON(item, seen);
-      return serialized === undefined ? 'null' : serialized;
+      return canonicalizeJSON(item, seen);
     });
     seen.delete(val);
     return '[' + items.join(',') + ']';
   }
 
-  // 8. Object
-  if (typeof val === 'object') {
-    if (seen.has(val)) {
-      throw new TypeError('Canonical error: Circular reference detected in object');
-    }
-    seen.add(val);
+  if (t === 'object') {
+    const target = typeof val.toJSON === 'function'
+      ? val.toJSON()
+      : val;
 
-    // Lexicographical UTF-16 code unit ordering
-    const sortedKeys = Object.keys(val).sort();
+    if (target === null) {
+      return 'null';
+    }
+
+    if (typeof target !== 'object' || Array.isArray(target)) {
+      return canonicalizeJSON(target, seen);
+    }
+
+    if (seen.has(val)) {
+      throw new TypeError('Canonical JSON: Circular reference detected');
+    }
+    seen.add(target);
+
+    const sortedKeys = Object.keys(target).sort();
     const entries = [];
 
     for (const key of sortedKeys) {
-      const propVal = val[key];
-      // Omit keys where value is undefined, function, or symbol
+      const propVal = target[key];
       if (propVal === undefined || typeof propVal === 'function' || typeof propVal === 'symbol') {
         continue;
       }
-      const serializedVal = canonicalizeJSON(propVal, seen);
-      if (serializedVal !== undefined) {
-        entries.push(JSON.stringify(key) + ':' + serializedVal);
-      }
+      entries.push(JSON.stringify(key) + ':' + canonicalizeJSON(propVal, seen));
     }
 
-    seen.delete(val);
+    seen.delete(target);
     return '{' + entries.join(',') + '}';
   }
 
-  return JSON.stringify(val);
+  throw new TypeError(`Canonical JSON: Unsupported type ${t}`);
 }
 
 /**
  * Computes official checksum for Request Code data
  */
 function computeRequestCodeChecksum(base64UrlData) {
-  const buf = Buffer.from(base64UrlData, 'utf-8');
-  return zlib.crc32(buf).toString(16).padStart(8, '0').toUpperCase();
+  let crc = 0xFFFF;
+  for (let i = 0; i < base64UrlData.length; i++) {
+    crc ^= base64UrlData.charCodeAt(i);
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 1) !== 0) {
+        crc = (crc >> 1) ^ 0xA001;
+      } else {
+        crc = crc >> 1;
+      }
+    }
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
 }
 
 /**
@@ -223,10 +233,7 @@ function computeRequestCodeChecksum(base64UrlData) {
  */
 function verifyRequestCodeChecksum(base64UrlData, checksum) {
   if (!checksum || typeof checksum !== 'string') return false;
-  const expectedCrc = computeRequestCodeChecksum(base64UrlData);
-  const expectedSha = crypto.createHash('sha256').update(base64UrlData).digest('hex').substring(0, 8).toUpperCase();
-  const normalized = checksum.trim().toUpperCase();
-  return normalized === expectedCrc || normalized === expectedSha;
+  return checksum.trim().toUpperCase() === computeRequestCodeChecksum(base64UrlData);
 }
 
 /**
@@ -235,18 +242,25 @@ function verifyRequestCodeChecksum(base64UrlData, checksum) {
  */
 function generateRequestCode(deviceId, options = {}) {
   const targetDevId = deviceId || generateDeviceId();
+  const customerId = typeof options.cust === 'string' ? options.cust.trim() : '';
+  if (!customerId) {
+    throw new Error('customerId/cust wajib diisi sebelum Request Code dibuat.');
+  }
+  if (!validateDeviceId(targetDevId)) {
+    throw new Error(`Cannot encode Request Code: invalid hardware device ID format "${targetDevId}"`);
+  }
   const payload = {
     v: EXACT_LICENSE_VERSION,
     app: TARGET_APP_ID,
-    dev: targetDevId,
-    cust: typeof options.cust === 'string' ? options.cust : '',
-    name: typeof options.name === 'string' ? options.name : '',
-    req: typeof options.req === 'string' ? options.req : ('REQ-' + crypto.randomBytes(6).toString('hex').toUpperCase()),
-    ts: typeof options.ts === 'string' ? options.ts : new Date().toISOString(),
-    notes: typeof options.notes === 'string' ? options.notes : '',
+    dev: targetDevId.trim(),
+    cust: customerId,
+    name: typeof options.name === 'string' ? options.name.trim() : '',
+    req: typeof options.req === 'string' ? options.req.trim() : ('REQ-' + crypto.randomBytes(6).toString('hex').toUpperCase()),
+    ts: typeof options.ts === 'string' ? options.ts.trim() : new Date().toISOString(),
+    notes: typeof options.notes === 'string' ? options.notes.trim() : '',
   };
 
-  const jsonStr = canonicalizeJSON(payload);
+  const jsonStr = JSON.stringify(payload);
   const base64UrlData = Buffer.from(jsonStr, 'utf-8').toString('base64url');
   const checksum = computeRequestCodeChecksum(base64UrlData);
   return `ALCO-REQ-v1.${base64UrlData}.${checksum}`;
@@ -337,12 +351,12 @@ function validateLicensePayloadSchema(payload) {
   }
 
   // 2. licenseId: non-empty string
-  if (typeof licenseId !== 'string' || licenseId.trim().length === 0 || licenseId.length > 256) {
+  if (typeof licenseId !== 'string' || licenseId.trim().length === 0 || licenseId.length > 100) {
     return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'licenseId tidak valid.' };
   }
 
   // 3. appId: non-empty string
-  if (typeof appId !== 'string' || appId.trim().length === 0 || appId.length > 128) {
+  if (typeof appId !== 'string' || appId.trim().length === 0 || appId.length > 100) {
     return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'appId tidak valid.' };
   }
 
@@ -357,7 +371,7 @@ function validateLicensePayloadSchema(payload) {
   }
 
   // 6. customerId: non-empty string
-  if (typeof customerId !== 'string' || customerId.trim().length === 0 || customerId.length > 128) {
+  if (typeof customerId !== 'string' || customerId.trim().length === 0 || customerId.length > 100) {
     return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'customerId tidak valid.' };
   }
 
@@ -406,6 +420,14 @@ function validateLicensePayloadSchema(payload) {
   if (metadata !== undefined) {
     if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
       return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'metadata harus berupa object valid.' };
+    }
+    for (const key of Object.keys(metadata)) {
+      if (!['issuedBy', 'appName', 'notes'].includes(key)) {
+        return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'metadata hanya boleh berisi issuedBy, appName, dan notes.' };
+      }
+      if (metadata[key] !== undefined && typeof metadata[key] !== 'string') {
+        return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'metadata issuedBy, appName, dan notes harus berupa string jika diisi.' };
+      }
     }
   }
 
@@ -536,7 +558,7 @@ function getStoragePath(userDataDir) {
  */
 function evaluateStoredLicense(userDataDir, publicKeyHex) {
   const deviceId = generateDeviceId();
-  const requestCode = generateRequestCode(deviceId);
+  const requestCode = '';
   const storagePath = getStoragePath(userDataDir);
 
   if (!fs.existsSync(storagePath)) {
@@ -579,7 +601,7 @@ function evaluateStoredLicense(userDataDir, publicKeyHex) {
  */
 function saveLicenseKey(userDataDir, rawLicenseKey, publicKeyHex) {
   const deviceId = generateDeviceId();
-  const requestCode = generateRequestCode(deviceId);
+  const requestCode = '';
   const storagePath = getStoragePath(userDataDir);
 
   const verification = verifyLicenseString(rawLicenseKey, deviceId, publicKeyHex);
@@ -615,7 +637,7 @@ function removeStoredLicense(userDataDir) {
     }
   }
   const deviceId = generateDeviceId();
-  const requestCode = generateRequestCode(deviceId);
+  const requestCode = '';
   return {
     status: STATUS_CODES.NO_LICENSE,
     deviceId,

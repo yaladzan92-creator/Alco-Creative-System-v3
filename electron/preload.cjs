@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('alcoLicense', {
   getStatus: () => ipcRenderer.invoke('alco-license-get-status'),
   getDeviceId: () => ipcRenderer.invoke('alco-license-get-device-id'),
-  getRequestCode: () => ipcRenderer.invoke('alco-license-get-request-code'),
+  getRequestCode: (options) => ipcRenderer.invoke('alco-license-get-request-code', options),
   activate: (licenseKey) => ipcRenderer.invoke('alco-license-activate', licenseKey),
   removeLicense: () => ipcRenderer.invoke('alco-license-remove'),
   isElectron: true,

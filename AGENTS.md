@@ -1,5 +1,23 @@
 # SPECIAL INSTRUCTION: SUPREME MASTER LOCK SYSTEM
 
+## Codex Electron Build Policy
+
+CODEX MUST NOT AUTOMATICALLY RUN ELECTRON PRODUCTION BUILD OR PACKAGING.
+
+After ordinary edits, audits, or refactors, the default Codex workflow is:
+
+1. Edit source.
+2. Run lint/type-check only when needed.
+3. Run targeted tests only when needed.
+4. Audit the result.
+5. Stop.
+
+Codex must not automatically run `npm run desktop:build`, `electron-builder`,
+Electron packaging, or installer generation. Electron production build and
+packaging are manual owner actions. Codex may run those commands only when the
+owner explicitly asks for "build Electron" or an equivalent production Electron
+build/package request.
+
 /**
  * @license
  * [!!!] SUPREME MASTER LOCK SYSTEM - LEVEL 50 SECURITY [!!!]

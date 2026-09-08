@@ -43,6 +43,43 @@ const currentDeviceId = generateDeviceId();
 let testPassedCount = 0;
 let testTotalCount = 0;
 
+function generatorChecksum(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i);
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 1) !== 0 ? (crc >> 1) ^ 0xA001 : crc >> 1;
+    }
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+
+function generatorDecodeRequestCode(rawInput) {
+  const trimmed = rawInput.trim();
+  if (!trimmed.startsWith('ALCO-REQ-v1.')) return { success: false };
+  const parts = trimmed.split('.');
+  if (parts.length !== 3) return { success: false };
+  const [, b64Data, checksum] = parts;
+  if (checksum.toUpperCase() !== generatorChecksum(b64Data).toUpperCase()) return { success: false };
+  const parsed = JSON.parse(Buffer.from(b64Data, 'base64url').toString('utf-8'));
+  if (!parsed.app || !parsed.dev || !parsed.cust) return { success: false };
+  if (!validateDeviceId(String(parsed.dev).trim())) return { success: false };
+  return {
+    success: true,
+    data: {
+      version: parsed.v || '1.0',
+      appId: String(parsed.app).trim(),
+      deviceId: String(parsed.dev).trim(),
+      customerId: String(parsed.cust).trim(),
+      customerName: parsed.name ? String(parsed.name).trim() : '',
+      requestId: parsed.req ? String(parsed.req).trim() : `REQ-${Date.now().toString(36).toUpperCase()}`,
+      timestamp: parsed.ts ? String(parsed.ts).trim() : new Date().toISOString(),
+      notes: parsed.notes ? String(parsed.notes).trim() : ''
+    },
+    raw: parsed,
+  };
+}
+
 function assert(condition, message) {
   testTotalCount++;
   if (condition) {
@@ -68,23 +105,46 @@ assert(validateDeviceId(currentDeviceId), 'Test 1: generated Device ID valid men
 assert(/^ALCO-DEV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(currentDeviceId), 'Test 2: Device ID format ALCO-DEV-XXXX-XXXX-XXXX');
 
 // 3. Request Code punya 3 segmen
-const reqCode = generateRequestCode(currentDeviceId, { name: 'Aladzan', cust: 'CUST-01' });
+const reqCode = generateRequestCode(currentDeviceId, {
+  name: 'Aladzan',
+  cust: 'CUST-01',
+  req: 'REQ-PARITY-01',
+  ts: '2026-09-08T00:00:00.000Z',
+  notes: 'Parity test'
+});
 const reqParts = reqCode.split('.');
 assert(reqParts.length === 3 && reqParts[0] === 'ALCO-REQ-v1', 'Test 3: Request Code punya 3 segmen (ALCO-REQ-v1.<data>.<checksum>)');
 
 // 4. Request Code checksum valid
-assert(verifyRequestCodeChecksum(reqParts[1], reqParts[2]), 'Test 4: Request Code checksum valid');
+assert(
+  reqParts[2].length === 4 &&
+  reqParts[2] === generatorChecksum(reqParts[1]) &&
+  verifyRequestCodeChecksum(reqParts[1], reqParts[2]),
+  'Test 4: Request Code checksum valid dan identik CRC16 4 hex generator'
+);
 
 // 5. Request Code bisa decode di License Generator
-const decodedReq = decodeRequestCode(reqCode);
+const decodedReq = generatorDecodeRequestCode(reqCode);
+const internalDecodedReq = decodeRequestCode(reqCode);
+const requestJson = Buffer.from(reqParts[1], 'base64url').toString('utf-8');
 assert(
-  decodedReq.valid === true &&
-  decodedReq.appId === TARGET_APP_ID &&
-  decodedReq.deviceId === currentDeviceId &&
-  decodedReq.payload.name === 'Aladzan' &&
-  decodedReq.payload.req.startsWith('REQ-'),
-  'Test 5: Request Code bisa decode di License Generator (appId, devId, reqId sama)'
+  decodedReq.success === true &&
+  internalDecodedReq.valid === true &&
+  decodedReq.data.appId === TARGET_APP_ID &&
+  decodedReq.data.deviceId === currentDeviceId &&
+  decodedReq.data.customerId === 'CUST-01' &&
+  decodedReq.data.requestId === 'REQ-PARITY-01' &&
+  requestJson === '{"v":"1.0","app":"alco-creative-system","dev":"' + currentDeviceId + '","cust":"CUST-01","name":"Aladzan","req":"REQ-PARITY-01","ts":"2026-09-08T00:00:00.000Z","notes":"Parity test"}',
+  'Test 5: Request Code bisa decode generator, cust truthy, dan JSON field order identik'
 );
+
+let missingCustRejected = false;
+try {
+  generateRequestCode(currentDeviceId);
+} catch {
+  missingCustRejected = true;
+}
+assert(missingCustRejected, 'Test 5b: Request Code final tidak dibuat tanpa customerId/cust');
 
 // 6. exact appId alco-creative-system
 const baseValidPayload = {
@@ -99,7 +159,7 @@ const baseValidPayload = {
   licenseType: 'lifetime',
   issuedAt: new Date().toISOString(),
   expiresAt: null,
-  metadata: { tier: 'lead' },
+  metadata: { issuedBy: 'ALCO License Generator', appName: 'ALCO Creative System', notes: 'Parity test' },
 };
 const key6 = signPayload(baseValidPayload, privateKey);
 const res6 = verifyLicenseString(key6, currentDeviceId, rawPubHex);
@@ -137,7 +197,13 @@ assert(res9.status === STATUS_CODES.MALFORMED_LICENSE, 'Test 9: malformed issued
 // 10. malformed metadata ditolak
 const badMetadataPayload = { ...baseValidPayload, metadata: 'string-instead-of-object' };
 const res10 = verifyLicenseString(signPayload(badMetadataPayload, privateKey), currentDeviceId, rawPubHex);
-assert(res10.status === STATUS_CODES.MALFORMED_LICENSE, 'Test 10: malformed metadata ditolak (MALFORMED_LICENSE)');
+const arbitraryMetadataPayload = { ...baseValidPayload, metadata: { tier: 'lead' } };
+const res10b = verifyLicenseString(signPayload(arbitraryMetadataPayload, privateKey), currentDeviceId, rawPubHex);
+assert(
+  res10.status === STATUS_CODES.MALFORMED_LICENSE &&
+  res10b.status === STATUS_CODES.MALFORMED_LICENSE,
+  'Test 10: malformed/arbitrary metadata ditolak (MALFORMED_LICENSE)'
+);
 
 // 11. lifetime expiresAt undefined ditolak
 const lifetimeUndefPayload = { ...baseValidPayload };
@@ -181,6 +247,15 @@ const expected2 = '{"a":1}';
 const testArr = [1, undefined, () => {}, Symbol('foo'), 2];
 const canon3 = canonicalizeJSON(testArr);
 const expected3 = '[1,null,null,null,2]';
+const canon4 = canonicalizeJSON({
+  unicode: 'Jalan Merdeka № 10 — Café ☕',
+  quote: 'Hello "World"',
+  slash: 'C:\\Users\\ALCO',
+  negativeZero: -0,
+});
+const expected4 = '{"negativeZero":0,"quote":"Hello \\"World\\"","slash":"C:\\\\Users\\\\ALCO","unicode":"Jalan Merdeka № 10 — Café ☕"}';
+const canon5 = canonicalizeJSON({ customDateObj: { toJSON: () => '2026-09-07T12:00:00.000Z' } });
+const expected5 = '{"customDateObj":"2026-09-07T12:00:00.000Z"}';
 
 let finiteCheckPassed = false;
 try {
@@ -188,13 +263,22 @@ try {
 } catch (err) {
   finiteCheckPassed = true;
 }
+let rootUnsupportedPassed = false;
+try {
+  canonicalizeJSON(undefined);
+} catch (err) {
+  rootUnsupportedPassed = true;
+}
 
 assert(
   canon1 === expected1 &&
   canon2 === expected2 &&
   canon3 === expected3 &&
-  finiteCheckPassed,
-  'Test 14: canonical test vectors identik (nested objects, keys sorted, arrays, nulls, finite numbers)'
+  canon4 === expected4 &&
+  canon5 === expected5 &&
+  finiteCheckPassed &&
+  rootUnsupportedPassed,
+  'Test 14: canonical test vectors identik (nested, arrays, unicode, escaping, -0, toJSON, unsupported root, finite numbers)'
 );
 
 // 15. wrong app ditolak

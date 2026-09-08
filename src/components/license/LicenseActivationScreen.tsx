@@ -59,7 +59,11 @@ const ERROR_LABELS: Record<LicenseStatusCode, { title: string; desc: string; bad
 
 export default function LicenseActivationScreen({ licenseState, onRefresh }: LicenseActivationScreenProps) {
   const [licenseInput, setLicenseInput] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [requestCode, setRequestCode] = useState(licenseState.requestCode || '');
   const [loading, setLoading] = useState(false);
+  const [requestLoading, setRequestLoading] = useState(false);
   const [copiedDevId, setCopiedDevId] = useState(false);
   const [copiedReqCode, setCopiedReqCode] = useState(false);
 
@@ -75,11 +79,36 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
   };
 
   const handleCopyReqCode = async () => {
-    if (licenseState.requestCode) {
-      await safeCopyToClipboard(licenseState.requestCode);
+    if (requestCode) {
+      await safeCopyToClipboard(requestCode);
       setCopiedReqCode(true);
       toast.success('Request Code berhasil disalin!');
       setTimeout(() => setCopiedReqCode(false), 2000);
+    }
+  };
+
+  const handleGenerateReqCode = async () => {
+    if (!customerId.trim()) {
+      toast.error('Isi Customer ID terlebih dahulu');
+      return;
+    }
+    if (!window.alcoLicense) {
+      toast.error('Request Code memerlukan ALCO Desktop App.');
+      return;
+    }
+    setRequestLoading(true);
+    try {
+      const code = await window.alcoLicense.getRequestCode({
+        cust: customerId.trim(),
+        name: customerName.trim(),
+      });
+      setRequestCode(code);
+      toast.success('Request Code resmi berhasil dibuat.');
+    } catch (err: any) {
+      setRequestCode('');
+      toast.error(err?.message || 'Gagal membuat Request Code.');
+    } finally {
+      setRequestLoading(false);
     }
   };
 
@@ -209,14 +238,44 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
               <button
                 type="button"
                 onClick={handleCopyReqCode}
-                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1 rounded-lg border border-indigo-500/20 transition-all cursor-pointer"
+                disabled={!requestCode}
+                className="text-xs font-bold text-indigo-400 hover:text-indigo-300 disabled:text-slate-600 flex items-center gap-1 bg-indigo-500/10 hover:bg-indigo-500/20 disabled:bg-slate-800/40 px-2 py-1 rounded-lg border border-indigo-500/20 disabled:border-slate-800 transition-all cursor-pointer disabled:cursor-not-allowed"
               >
                 {copiedReqCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedReqCode ? 'Tersalin' : 'Copy'}</span>
               </button>
             </div>
+            <div className="grid grid-cols-1 gap-2">
+              <input
+                value={customerId}
+                onChange={(e) => {
+                  setCustomerId(e.target.value);
+                  setRequestCode('');
+                }}
+                placeholder="Customer ID dari owner"
+                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <input
+                value={customerName}
+                onChange={(e) => {
+                  setCustomerName(e.target.value);
+                  setRequestCode('');
+                }}
+                placeholder="Nama customer (opsional)"
+                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <button
+                type="button"
+                onClick={handleGenerateReqCode}
+                disabled={requestLoading || !customerId.trim()}
+                className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {requestLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                <span>Buat Request Code</span>
+              </button>
+            </div>
             <div className="font-mono text-[11px] text-slate-300 bg-slate-900 px-3 py-2 rounded-xl border border-slate-800/80 truncate select-all">
-              {licenseState.requestCode || 'Memuat Request Code...'}
+              {requestCode || 'Isi Customer ID lalu buat Request Code'}
             </div>
             <p className="text-[10px] text-slate-500 leading-snug">
               Berikan Request Code ini kepada owner untuk membuat License Key resmi.
