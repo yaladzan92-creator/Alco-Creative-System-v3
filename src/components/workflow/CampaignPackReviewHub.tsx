@@ -35,9 +35,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn, safeCopyToClipboard, handleAIError } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { generateAIContent, safeParseJSON } from "@/services/aiService";
+import { generateAIContent, parseRequiredAIJSON } from "@/services/aiService";
 import { buildMetaAdsCampaignPack, downloadMetaAdsCampaignPack } from "@/lib/metaAdsCampaignPack";
 import { downloadEcosystemBlueprint, buildEcosystemBlueprint } from "@/lib/ecosystemBlueprint";
+import { buildRevisionPromptContext } from "@/utils/revisionPromptHelper";
 
 interface CampaignPackReviewHubProps {
   project: any;
@@ -179,17 +180,74 @@ export default function CampaignPackReviewHub({
   };
 
   const getCampaignContext = () => {
+    const coreMemory = {
+      projectName: project?.name || campaignPack.campaign_name,
+      product: project?.initialProductData || project?.product || {},
+      productStatus: project?.productStatus || project?.initialProductData?.status,
+      brand: project?.brandFoundation?.output || project?.brandFoundation || {},
+      niche: project?.sharedBusinessContext?.niche || project?.niche?.selected || project?.niche,
+      audience: project?.audience?.output || project?.targetAudience || project?.sharedBusinessContext?.audience,
+      painPoints: project?.painPoint?.output || project?.problemAnalysis?.output || project?.sharedBusinessContext?.painPoints,
+      validation: project?.validation?.output || project?.marketValidation?.output,
+      positioning: project?.positioning?.output || project?.brandPositioning?.output,
+      offer: project?.offer?.output || project?.offerStack?.output || project?.sharedBusinessContext?.offer,
+      angles: project?.marketingAngles?.output || project?.adsGeneratedAngles || campaignPack.image_ads,
+      copywriting: project?.copyDirection?.output || campaignPack.copy_assets,
+      selectedCharacter: project?.adsInputState?.ugcCharacterProfile || project?.adsInputState?.selectedCharacter || null,
+      campaignPack: {
+        campaignName: campaignPack.campaign_name,
+        objective: campaignPack.campaign_objective,
+        dailyBudget: campaignPack.dailyBudget,
+        targeting: campaignPack.targeting,
+        creativeStrategy: campaignPack.creative_strategy,
+        copyAssets: campaignPack.copy_assets,
+        policyFlags: campaignPack.policy_flags,
+        assumptions: campaignPack.assumptions
+      }
+    };
+
     return `
-      Product: ${campaignPack.campaign_name}
-      Objective: ${campaignPack.campaign_objective}
-      Daily Budget: Rp ${campaignPack.dailyBudget.toLocaleString("id-ID")}
-      Targeting: ${campaignPack.targeting.country}, Usia ${campaignPack.targeting.ageMin}-${campaignPack.targeting.ageMax}
-      Interests: ${campaignPack.targeting.interests.join(", ")}
-      Primary Angle: ${campaignPack.creative_strategy.primary_angle}
-      Visual Hook: ${campaignPack.creative_strategy.visual_hook}
-      Emotional Trigger: ${campaignPack.creative_strategy.emotional_trigger}
-      USP: ${campaignPack.creative_strategy.value_proposition}
-    `.trim();
+KONTEKS CAMPAIGN MEMORY TERKUNCI:
+${JSON.stringify(coreMemory, null, 2)}
+
+ATURAN SINKRONISASI:
+- Jangan mengganti produk, niche, persona, offer, CTA, atau angle utama kecuali data sumbernya memang kosong.
+- Jika membuat aset baru, semua output wajib tetap konsisten dengan campaign memory di atas.
+- Jika ada karakter/model/creator yang sudah dipilih, gunakan karakter yang sama untuk prompt gambar dan video.
+- Jangan membuat klaim pendapatan, klaim hasil pasti, atau janji berlebihan yang rawan melanggar Meta Ads policy.
+`.trim();
+  };
+
+  const getPreviousSectionOutput = (sectionKey: string) => {
+    switch (sectionKey) {
+      case "copywriting":
+        return project?.copyDirection?.output || campaignPack.copy_assets;
+      case "marketingAngles":
+      case "imageConcepts":
+        return project?.adsGeneratedAngles || campaignPack.image_ads;
+      case "videoScripts":
+        return project?.adsInputState?.generatedVideoDirections || campaignPack.video_ads;
+      case "carouselDeck":
+        return project?.adsInputState?.generatedCarousel || campaignPack.carousel_ads;
+      case "landing":
+        return project?.landingPageData?.output || campaignPack.landing_page;
+      case "policyTracking":
+        return project?.adsRecommendationsState || {
+          tracking: campaignPack.tracking_checklist,
+          policy: campaignPack.policy_flags
+        };
+      default:
+        return campaignPack;
+    }
+  };
+
+  const buildRegenerationContext = (sectionKey: string, sectionName: string, instruction: string) => {
+    return buildRevisionPromptContext({
+      revision: instruction,
+      previousOutput: getPreviousSectionOutput(sectionKey),
+      stepName: `Step 10 - ${sectionName}`,
+      defaultContext: getCampaignContext()
+    });
   };
 
   // --- REGENERATE LEVEL A (SINGLE SECTION) ---
@@ -200,7 +258,7 @@ export default function CampaignPackReviewHub({
       toast.info(`Merender ulang ${sectionName}...`);
 
       if (sectionKey === "copywriting") {
-        const prompt = `Generate an updated set of high-converting Meta Ads copy assets in Indonesian language based on campaign context.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui copywriting Meta Ads dalam Bahasa Indonesia. Pertahankan produk, persona, offer, angle utama, dan CTA dari campaign memory. Buat naskah lebih jelas, pendek, persuasif, dan ramah pemula.");
         const sys = `Return JSON strictly matching schema:
         {
           "hooks": ["hook 1", "hook 2", "hook 3"],
@@ -209,24 +267,22 @@ export default function CampaignPackReviewHub({
           "ctas": ["CTA 1", "CTA 2", "CTA 3"]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed) {
-          onSaveProject({
-            copyDirection: {
-              ...(project.copyDirection || {}),
-              output: {
-                ...(project.copyDirection?.output || {}),
-                hooks: parsed.hooks || campaignPack.copy_assets.hooks,
-                headlines: parsed.headlines || campaignPack.copy_assets.headlines,
-                adCopies: parsed.primaryTexts || campaignPack.copy_assets.primary_texts,
-                ctas: parsed.ctas || campaignPack.copy_assets.ctas
-              }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        onSaveProject({
+          copyDirection: {
+            ...(project.copyDirection || {}),
+            output: {
+              ...(project.copyDirection?.output || {}),
+              hooks: parsed.hooks || campaignPack.copy_assets.hooks,
+              headlines: parsed.headlines || campaignPack.copy_assets.headlines,
+              adCopies: parsed.primaryTexts || campaignPack.copy_assets.primary_texts,
+              ctas: parsed.ctas || campaignPack.copy_assets.ctas
             }
-          });
-          toast.success(`Copywriting Pack berhasil diperbarui!`);
-        }
+          }
+        });
+        toast.success(`Copywriting Pack berhasil diperbarui!`);
       } else if (sectionKey === "marketingAngles") {
-        const prompt = `Generate 3 distinct converting Meta Ads angles (A: Emotional Pain to Relief, B: Problem Solution, C: Aspirational/Lifestyle) in Indonesian language.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui 3 angle Meta Ads. Jangan mengganti produk, persona, offer, atau positioning utama. Setiap angle harus menjadi turunan langsung dari campaign memory dan siap dipakai untuk image, carousel, video, dan landing page.");
         const sys = `Return JSON with schema:
         {
           "angles": [
@@ -266,13 +322,12 @@ export default function CampaignPackReviewHub({
           ]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed?.angles) {
-          onSaveProject({ adsGeneratedAngles: parsed.angles });
-          toast.success(`Marketing Angles A/B/C diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        if (!parsed?.angles) throw new Error("Format Marketing Angles dari AI tidak lengkap.");
+        onSaveProject({ adsGeneratedAngles: parsed.angles });
+        toast.success(`Marketing Angles A/B/C diperbarui!`);
       } else if (sectionKey === "imageConcepts") {
-        const prompt = `Generate updated photorealistic Meta Ads image prompts and visual strategy in Indonesian language.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui prompt image ads fotorealistis. Semua prompt gambar wajib konsisten dengan produk, offer, persona, angle, tone brand, dan karakter/model jika ada. Jangan membuat konsep baru yang keluar dari campaign memory.");
         const sys = `Return JSON: {
           "angles": [
             {
@@ -290,13 +345,12 @@ export default function CampaignPackReviewHub({
           ]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed?.angles) {
-          onSaveProject({ adsGeneratedAngles: parsed.angles });
-          toast.success(`Konsep Gambar Iklan diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        if (!parsed?.angles) throw new Error("Format Konsep Gambar dari AI tidak lengkap.");
+        onSaveProject({ adsGeneratedAngles: parsed.angles });
+        toast.success(`Konsep Gambar Iklan diperbarui!`);
       } else if (sectionKey === "videoScripts") {
-        const prompt = `Generate a 30-second high-converting UGC video ad script in Indonesian.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui video ads sebagai materi Meta Ads. Pertahankan campaign memory dan karakter/model jika ada. Jangan mengganti jenis kelamin/usia/penampilan karakter. Jika membuat struktur scene, gunakan pesan Hook, Solution, dan CTA yang konsisten dengan produk dan offer.");
         const sys = `Return JSON: {
           "videoDirections": [
             {
@@ -310,18 +364,17 @@ export default function CampaignPackReviewHub({
           ]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed?.videoDirections) {
-          onSaveProject({
-            adsInputState: {
-              ...(project.adsInputState || {}),
-              generatedVideoDirections: parsed.videoDirections
-            }
-          });
-          toast.success(`Video Script Ads diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        if (!parsed?.videoDirections) throw new Error("Format Video Script dari AI tidak lengkap.");
+        onSaveProject({
+          adsInputState: {
+            ...(project.adsInputState || {}),
+            generatedVideoDirections: parsed.videoDirections
+          }
+        });
+        toast.success(`Video Script Ads diperbarui!`);
       } else if (sectionKey === "carouselDeck") {
-        const prompt = `Generate a 5-slide conversion carousel deck in Indonesian.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui carousel Meta Ads 5 slide. Semua slide wajib mengikuti produk, persona, pain point, offer, angle utama, dan CTA dari campaign memory. Buat alur Hook, Pain, Solution, Offer, CTA yang mudah dipahami pemula.");
         const sys = `Return JSON: {
           "slides": [
             { "slideNumber": 1, "title": "Slide Hook", "visualNote": "Visual masalah utama" },
@@ -332,18 +385,17 @@ export default function CampaignPackReviewHub({
           ]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed?.slides) {
-          onSaveProject({
-            adsInputState: {
-              ...(project.adsInputState || {}),
-              generatedCarousel: [{ id: "car_1", title: "Carousel Sequence", slides: parsed.slides }]
-            }
-          });
-          toast.success(`Carousel Slide Deck diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        if (!parsed?.slides) throw new Error("Format Carousel dari AI tidak lengkap.");
+        onSaveProject({
+          adsInputState: {
+            ...(project.adsInputState || {}),
+            generatedCarousel: [{ id: "car_1", title: "Carousel Sequence", slides: parsed.slides }]
+          }
+        });
+        toast.success(`Carousel Slide Deck diperbarui!`);
       } else if (sectionKey === "landing") {
-        const prompt = `Generate an updated conversion-driven Landing Page blueprint for Meta Ads traffic in Indonesian.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Perbarui blueprint landing page untuk traffic Meta Ads. Jangan mengganti produk, offer, persona, CTA, atau positioning. Fokus ke hero, subheadline, benefit, proof, dan CTA yang sesuai campaign memory.");
         const sys = `Return JSON: {
           "heroHeadline": "Headline penghenti scroll utama",
           "heroSubheadline": "Subheadline penjelas proposisi nilai",
@@ -351,34 +403,30 @@ export default function CampaignPackReviewHub({
           "keyBenefits": ["Akses instan 24/7", "Bonus modul eksklusif", "Garansi kepuasan"]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed) {
-          onSaveProject({
-            landingPageData: {
-              ...(project.landingPageData || {}),
-              output: parsed
-            }
-          });
-          toast.success(`Landing Page Blueprint diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        onSaveProject({
+          landingPageData: {
+            ...(project.landingPageData || {}),
+            output: parsed
+          }
+        });
+        toast.success(`Landing Page Blueprint diperbarui!`);
       } else if (sectionKey === "policyTracking") {
-        const prompt = `Check Meta Ads policy compliance and tracking setup for this campaign.\n\nContext:\n${context}`;
+        const prompt = buildRegenerationContext(sectionKey, sectionName, "Audit tracking dan compliance Meta Ads berdasarkan campaign memory. Fokus ke Pixel/CAPI/Event/UTM dan flag klaim iklan berisiko. Jangan mengubah strategi kampanye.");
         const sys = `Return JSON: {
           "tracking_checklist": ["Pixel verify", "CAPI setup", "Event measurement"],
           "policy_flags": ["Avoid earning guarantee claims", "Include T&C link", "Use clean imagery"]
         }`;
         const res = await generateAIContent(prompt, sys);
-        const parsed = safeParseJSON(res.text, null);
-        if (parsed) {
-          onSaveProject({
-            adsRecommendationsState: {
-              ...(project.adsRecommendationsState || {}),
-              tracking: parsed.tracking_checklist,
-              policy: parsed.policy_flags
-            }
-          });
-          toast.success(`Tracking & Policy Flags diperbarui!`);
-        }
+        const parsed = parseRequiredAIJSON(res.text, sectionName);
+        onSaveProject({
+          adsRecommendationsState: {
+            ...(project.adsRecommendationsState || {}),
+            tracking: parsed.tracking_checklist,
+            policy: parsed.policy_flags
+          }
+        });
+        toast.success(`Tracking & Policy Flags diperbarui!`);
       } else {
         toast.success(`Data ${sectionName} disegarkan dari memori alur!`);
       }

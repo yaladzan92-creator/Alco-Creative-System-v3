@@ -662,10 +662,10 @@ export default function Dashboard() {
             </div>
             <div>
               <h2 className="text-xs sm:text-sm font-heading font-black text-foreground">
-                Alur 3 Langkah Menghasilkan Iklan
+                Panduan Cepat Pemula
               </h2>
               <p className="text-[11px] text-muted-foreground font-medium">
-                Panduan singkat dari ide produk hingga iklan Meta Ads siap pasang.
+                Buka jika Anda belum yakin harus lanjut ke bagian mana.
               </p>
             </div>
           </div>
@@ -1032,7 +1032,7 @@ export default function Dashboard() {
                       {/* Step Indicator Badges (Strategy, Brand, Ads) */}
                       <div className="grid grid-cols-3 gap-1.5 p-2 bg-secondary/30 rounded-xl border border-border/50 text-[10px]">
                         <div className="space-y-0.5 text-center">
-                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Strategi</span>
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Riset</span>
                           <span className={cn("font-bold text-[10px]", progressInfo.stratMilestones >= 8 ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground")}>
                             {progressInfo.stratMilestones}/8 {progressInfo.stratMilestones >= 8 && "✓"}
                           </span>
@@ -1046,9 +1046,9 @@ export default function Dashboard() {
                         </div>
 
                         <div className="space-y-0.5 text-center">
-                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Iklan Ads</span>
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Konten Iklan</span>
                           <span className={cn("font-bold text-[10px]", progressInfo.hasAdsAssets ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-                            {progressInfo.hasAdsAssets ? "Tersedia ✨" : "Belum"}
+                            {progressInfo.hasAdsAssets ? "Siap" : "Belum"}
                           </span>
                         </div>
                       </div>
@@ -1096,7 +1096,7 @@ export default function Dashboard() {
                               title={progressInfo.hasAdsAssets ? "Buka kembali & buat ulang aset iklan (Regenerate Ads)" : "Langsung buka Step 10 Generator Iklan Meta"}
                             >
                               <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-500/20 shrink-0" />
-                              <span className="hidden md:inline">{progressInfo.hasAdsAssets ? "Regenerate Iklan (Step 10)" : "Shortcut Iklan Meta (Step 10)"}</span>
+                              <span className="hidden md:inline">{progressInfo.hasAdsAssets ? "Generate Ulang Iklan" : "Buat Konten Iklan"}</span>
                               <span className="md:hidden">{progressInfo.hasAdsAssets ? "Buat Ulang Iklan" : "Buka Generator Iklan"}</span>
                             </Button>
                           ) : (
@@ -1108,8 +1108,8 @@ export default function Dashboard() {
                               className="w-full h-8 text-[11px] font-bold uppercase tracking-wider rounded-xl border-border/50 text-muted-foreground/60 bg-secondary/40 cursor-not-allowed flex items-center justify-center gap-1.5"
                             >
                               <Zap className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-                              <span className="hidden md:inline">Shortcut Ads (Selesaikan strategi dulu)</span>
-                              <span className="md:hidden">Iklan Meta Terkunci</span>
+                              <span className="hidden md:inline">Selesaikan Strategi Dulu</span>
+                              <span className="md:hidden">Strategi Belum Siap</span>
                             </Button>
                           )}
                         </div>

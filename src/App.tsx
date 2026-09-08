@@ -60,6 +60,7 @@ function MainAppLayout({
                 onClick={toggleSidebar}
                 id="btn-toggle-sidebar"
                 title={sidebarOpen ? "Tutup / Sembunyikan Sidebar" : "Buka / Perluas Sidebar"}
+                aria-label={sidebarOpen ? "Tutup sidebar" : "Buka sidebar"}
                 className="p-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground hover:text-primary border border-border/70 transition-all cursor-pointer flex items-center justify-center shrink-0 group shadow-sm active:scale-95"
               >
                 <Menu className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
@@ -81,6 +82,7 @@ function MainAppLayout({
                 <button
                   onClick={() => { void promptApiKey(false).catch(() => undefined); }}
                   title="Gemini AI Aktif (Klik untuk ubah API Key)"
+                  aria-label="Gemini AI aktif. Klik untuk ubah API Key"
                   className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -90,6 +92,7 @@ function MainAppLayout({
                 <button
                   onClick={() => { void promptApiKey(false).catch(() => undefined); }}
                   title="Klik untuk mengaktifkan Gemini AI"
+                  aria-label="Aktifkan Gemini AI"
                   className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -100,6 +103,7 @@ function MainAppLayout({
               <button
                 onClick={() => window.open("https://ai.studio/apps/b61328f3-5e01-4ba3-bc60-9c93a9475ba4", "_blank", "noopener,noreferrer")}
                 title="Buka Alco Content Engine"
+                aria-label="Buka Alco Content Engine"
                 className="text-[11px] font-extrabold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1 rounded-xl border border-primary/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
               >
                 <Zap className="w-3.5 h-3.5 fill-primary/15 animate-pulse text-primary" />

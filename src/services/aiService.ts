@@ -105,6 +105,16 @@ export function safeParseJSON(text: string, defaultValue: any = {}): any {
   }
 }
 
+export function parseRequiredAIJSON(text: string, sectionName = "output AI"): any {
+  const parsed = safeParseJSON(text, null);
+  if (!parsed) {
+    throw new Error(
+      `Format ${sectionName} dari AI tidak valid. Silakan klik generate ulang agar AI mengirim JSON yang lengkap.`
+    );
+  }
+  return parsed;
+}
+
 type ApiKeyModalHandler = {
   open: (resolve: (key: string) => void, reject: (err: any) => void, isInvalid?: boolean) => void;
   close: () => void;

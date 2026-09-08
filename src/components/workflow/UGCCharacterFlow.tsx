@@ -1260,7 +1260,7 @@ export default function UGCCharacterFlow({
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
-                    Generate Paket Produksi Video 3-Scene
+                    Generate Video Ads 3 Scene
                   </>
                 )}
               </Button>
@@ -1278,13 +1278,13 @@ export default function UGCCharacterFlow({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
                 <div className="space-y-1 flex-1 min-w-0">
                   <div className="inline-flex items-center gap-1.5 bg-rose-500/10 text-rose-500 border border-rose-500/30 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 shrink-0" /> PAKET PRODUKSI VIDEO 3-SCENE
+                    <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 shrink-0" /> VIDEO ADS 3 SCENE
                   </div>
                   <h3 className="text-xl md:text-2xl font-heading font-black text-foreground uppercase tracking-tight line-clamp-2 break-words [overflow-wrap:anywhere] max-w-full">
                     {ugcOutput.characterProfile?.name || "Paket Produksi Video Ads"}
                   </h3>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Paket Siap Pakai Google Flow (Hook 8s • Solution 8s • CTA 8s)
+                    Prompt siap salin untuk Google Flow (Hook 8s • Solution 8s • CTA 8s)
                   </p>
                 </div>
 
@@ -1305,7 +1305,7 @@ export default function UGCCharacterFlow({
                     className="font-black text-xs uppercase tracking-wider h-9 px-3.5 rounded-xl cursor-pointer w-full sm:w-auto justify-center"
                   >
                     <Copy className="w-3.5 h-3.5 mr-1" />
-                    Copy Full Pack
+                    Copy Semua Prompt
                   </Button>
                 </div>
               </div>
@@ -1315,7 +1315,7 @@ export default function UGCCharacterFlow({
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                   <span className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    Urutan Kerja Utama Produksi
+                    Urutan Produksi
                   </span>
                   <span className="text-[10px] text-muted-foreground font-medium">Ikuti 3 langkah kerja utama:</span>
                 </div>

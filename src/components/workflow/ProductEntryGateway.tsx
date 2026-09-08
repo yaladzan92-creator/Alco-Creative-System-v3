@@ -742,7 +742,7 @@ Return ONLY JSON adhering to this structure:
           <span>Panduan Awal Penjual Produk Digital</span>
         </div>
         <h2 className="text-2xl md:text-3xl font-heading font-black tracking-tight text-foreground">
-          Langkah 1: Tentukan Status Produk Digital Anda
+          Mulai dari kondisi produk Anda
         </h2>
         <p className="text-muted-foreground text-xs md:text-sm max-w-2xl mx-auto leading-relaxed font-sans">
           Apakah Anda sudah memiliki produk sendiri, atau ingin AI membantu membuatkan ide e-book & draf iklan siap pakai secara instan?
@@ -828,7 +828,16 @@ Return ONLY JSON adhering to this structure:
           >
             {/* CHOICE 1: SAYA SUDAH PUNYA PRODUK */}
             <Card 
+              role="button"
+              tabIndex={0}
+              aria-label="Pilih jika Anda sudah punya produk"
               onClick={() => setProductStatus("has_product")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setProductStatus("has_product");
+                }
+              }}
               className="group cursor-pointer hover:border-emerald-500/80 transition-all border-2 border-border bg-card hover:bg-emerald-500/5 hover:shadow-xl rounded-3xl overflow-hidden relative"
             >
               <CardContent className="p-6 space-y-5">
@@ -866,16 +875,28 @@ Return ONLY JSON adhering to this structure:
 
             {/* CHOICE 2: SAYA BELUM PUNYA PRODUK (FAST-TRACK EXPRESS) */}
             <Card 
+              role="button"
+              tabIndex={0}
+              aria-label="Pilih jika Anda belum punya produk"
               onClick={() => {
                 setProductStatus("no_product");
                 if (generatedIdeas.length === 0) {
                   handleGenerateEbookIdeas("Bisnis Online & Marketing Pemula");
                 }
               }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setProductStatus("no_product");
+                  if (generatedIdeas.length === 0) {
+                    handleGenerateEbookIdeas("Bisnis Online & Marketing Pemula");
+                  }
+                }
+              }}
               className="group cursor-pointer hover:border-indigo-500 transition-all border-2 border-indigo-500/40 bg-indigo-500/5 hover:bg-indigo-500/10 hover:shadow-2xl rounded-3xl overflow-hidden relative"
             >
               <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-bl-xl shadow-sm">
-                Rekomendasi Pemula ✨ (Express Auto-Draft)
+                Rekomendasi Pemula
               </div>
               <CardContent className="p-6 space-y-5">
                 <div className="flex items-center justify-between">
@@ -893,7 +914,7 @@ Return ONLY JSON adhering to this structure:
                     <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
                   </h3>
                   <p className="text-xs text-muted-foreground leading-relaxed font-sans">
-                    Bantu saya buatkan ide Ebook / Produk Digital termudah + langsung rakit draf campaign Meta Ads secara otomatis!
+                    Bantu saya menemukan ide e-book termudah, lalu siapkan draf iklan Meta Ads pertama.
                   </p>
                 </div>
 
@@ -904,7 +925,7 @@ Return ONLY JSON adhering to this structure:
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span>Otomatis rakit draf audiens, offer & naskah iklan</span>
+                    <span>Siapkan audiens, penawaran, dan naskah iklan awal</span>
                   </div>
                 </div>
               </CardContent>
@@ -1136,7 +1157,7 @@ Return ONLY JSON adhering to this structure:
               </button>
               <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 font-bold">
                 <BookOpen className="w-4 h-4" />
-                <span>Mode Pemula: Fast-Track Generator Ebook AI</span>
+                <span>Mode Pemula: Generator Ide Ebook</span>
               </div>
             </div>
 
@@ -1149,7 +1170,7 @@ Return ONLY JSON adhering to this structure:
                     <span>Pilih Topik Ebook Termudah</span>
                   </h3>
                   <p className="text-xs text-muted-foreground leading-relaxed font-sans">
-                    Pilih salah satu kategori favorit atau ketik topik sendiri. AI akan meriset 3 ide e-book paling potensial diiklan Meta Ads.
+                    Pilih salah satu kategori favorit atau ketik topik sendiri. AI akan membantu memilih 3 ide e-book yang mudah dibuat dan siap diuji lewat Meta Ads.
                   </p>
                 </div>
 
@@ -1332,7 +1353,7 @@ Return ONLY JSON adhering to this structure:
                     ) : (
                       <>
                         <Zap className="w-4 h-4 text-amber-300 fill-amber-300 animate-pulse" />
-                        <span>⚡ Rakit Draf Campaign Meta Ads Otomatis (Full AI)</span>
+                        <span>Siapkan Draf Iklan Meta Ads</span>
                       </>
                     )}
                   </Button>

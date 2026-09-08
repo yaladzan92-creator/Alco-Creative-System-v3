@@ -102,6 +102,7 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
             onClick={onToggle}
             id="btn-sidebar-header-toggle"
             title={isOpen ? "Menciutkan Sidebar" : "Memperluas Sidebar"}
+            aria-label={isOpen ? "Menciutkan sidebar" : "Memperluas sidebar"}
             className="p-1.5 rounded-xl bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all cursor-pointer border border-border/50 shrink-0 flex items-center justify-center"
           >
             {isOpen ? <PanelLeftClose className="w-4 h-4 text-primary" /> : <PanelLeftOpen className="w-4 h-4 text-primary" />}
@@ -129,6 +130,7 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
                 }}
                 id={`sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 title={!isOpen ? item.label : undefined}
+                aria-label={item.label}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
                   !isOpen && "justify-center px-0",
@@ -158,6 +160,7 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
           <button
             onClick={() => window.open("https://ai.studio/apps/b61328f3-5e01-4ba3-bc60-9c93a9475ba4", "_blank", "noopener,noreferrer")}
             title={!isOpen ? "ALCO Content Engine" : undefined}
+            aria-label="Buka ALCO Content Engine"
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all duration-200 group cursor-pointer shadow-sm w-full text-left",
               !isOpen && "justify-center px-0 mt-3"
@@ -187,10 +190,10 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 py-2">
-                <Link to="/rebrand" title="Pengaturan Aplikasi" className="p-1.5 text-muted-foreground hover:text-primary transition-colors text-xs">
+                <Link to="/rebrand" title="Pengaturan Aplikasi" aria-label="Pengaturan Aplikasi" className="p-1.5 text-muted-foreground hover:text-primary transition-colors text-xs">
                   🎨
                 </Link>
-                <Link to="/developer" title="Alat Lanjutan" className="p-1.5 text-muted-foreground hover:text-primary transition-colors text-xs">
+                <Link to="/developer" title="Alat Lanjutan" aria-label="Alat Lanjutan" className="p-1.5 text-muted-foreground hover:text-primary transition-colors text-xs">
                   ⚙️
                 </Link>
               </div>

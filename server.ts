@@ -723,7 +723,12 @@ async function startServer() {
       
       console.log(`[AI Request] User: ${userId} | Prompt: ${prompt.substring(0, 50)}...`);
 
-      const modelsToTry = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
+      const configuredModels = process.env.ALCO_GEMINI_MODELS
+        ? process.env.ALCO_GEMINI_MODELS.split(",").map((model: string) => model.trim()).filter(Boolean)
+        : [];
+      const modelsToTry = configuredModels.length > 0
+        ? configuredModels
+        : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
       let attempts = 0;
       const maxAttempts = 3;
       let lastError = null;
@@ -880,7 +885,7 @@ async function startServer() {
 
       console.log(`[Public API v1] Executing request. Prompt prefix: ${prompt.substring(0, 50)}...`);
 
-      const modelToUse = "gemini-3.7-flash";
+      const modelToUse = process.env.ALCO_GEMINI_PUBLIC_MODEL || "gemini-2.5-flash";
       const configObj: any = {
         systemInstruction: systemInstruction || "You are Alco Creative System's API Assistant. Provide practical, accurate and detailed response."
       };
