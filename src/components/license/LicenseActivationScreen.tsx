@@ -50,6 +50,11 @@ const ERROR_LABELS: Record<LicenseStatusCode, { title: string; desc: string; bad
     desc: 'Versi lisensi tidak kompatibel dengan versi verifier aplikasi ini.',
     badgeColor: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
   },
+  CONFIGURATION_ERROR: {
+    title: 'Konfigurasi Belum Lengkap',
+    desc: 'Public key verifikasi belum dikonfigurasi (ALCO_LICENSE_PUBLIC_KEY missing). Hubungi Aladzan Corpora.',
+    badgeColor: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  },
 };
 
 export default function LicenseActivationScreen({ licenseState, onRefresh }: LicenseActivationScreenProps) {

@@ -6,10 +6,22 @@ export type LicenseStatusCode =
   | 'WRONG_APP'
   | 'EXPIRED_LICENSE'
   | 'MALFORMED_LICENSE'
-  | 'UNSUPPORTED_LICENSE_VERSION';
+  | 'UNSUPPORTED_LICENSE_VERSION'
+  | 'CONFIGURATION_ERROR';
+
+export interface RequestCodePayload {
+  v: string;
+  app: string;
+  dev: string;
+  cust: string;
+  name: string;
+  req: string;
+  ts: string;
+  notes?: string;
+}
 
 export interface LicensePayload {
-  licenseVersion: string;
+  licenseVersion: '1.0' | string;
   licenseId: string;
   appId: string;
   deviceId: string;
@@ -18,8 +30,8 @@ export interface LicensePayload {
   plan: 'starter' | 'pro' | 'enterprise' | 'custom';
   features: string[];
   licenseType: 'lifetime' | 'subscription';
-  issuedAt: string | number;
-  expiresAt: string | number | null;
+  issuedAt: string;
+  expiresAt: string | null;
   metadata?: Record<string, any>;
 }
 

@@ -1,20 +1,24 @@
 /**
- * ALCO Creative System — Client License Verifier & Storage
- * Format: ALCO-LIC-v1.<payload-base64url>.<signature-hex>
- * Target App ID: alco-creative-system
+ * ALCO Creative System — Official License Verifier & Storage Client
+ * Source of Truth: ALCO License Generator
+ * 
+ * Standards:
+ * - App ID: alco-creative-system
+ * - License Format: ALCO-LIC-v1.<Base64UrlPayload>.<SignatureHex>
+ * - Payload licenseVersion: EXACT "1.0"
+ * - Device ID Format: ALCO-DEV-XXXX-XXXX-XXXX
+ * - Request Code Format: ALCO-REQ-v1.<Base64UrlData>.<Checksum>
+ * - Public Key: Ed25519 32-byte raw public key (64 hex characters)
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const TARGET_APP_ID = 'alco-creative-system';
-const SUPPORTED_LICENSE_VERSIONS = ['1', '1.0', 'v1', 'ALCO-LIC-v1'];
-
-// Public key configuration (64 hex characters = 32 bytes raw Ed25519 public key)
-// In production, populate process.env.ALCO_LICENSE_PUBLIC_KEY or place in license-config.json
-const DEFAULT_PUBLIC_KEY = process.env.ALCO_LICENSE_PUBLIC_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
+const EXACT_LICENSE_VERSION = '1.0';
 
 const STATUS_CODES = {
   LICENSE_VALID: 'LICENSE_VALID',
@@ -25,75 +29,387 @@ const STATUS_CODES = {
   EXPIRED_LICENSE: 'EXPIRED_LICENSE',
   MALFORMED_LICENSE: 'MALFORMED_LICENSE',
   UNSUPPORTED_LICENSE_VERSION: 'UNSUPPORTED_LICENSE_VERSION',
+  CONFIGURATION_ERROR: 'CONFIGURATION_ERROR',
 };
 
-/**
- * Generate privacy-conscious, hardware-bound Device ID from stable system traits
- */
-function generateDeviceId() {
-  const traits = [
-    process.platform,
-    process.arch,
-    os.hostname(),
-    os.homedir(),
-    os.cpus()?.[0]?.model || '',
-    os.totalmem(),
-  ];
+const ALLOWED_PLANS = ['starter', 'pro', 'enterprise', 'custom'];
 
+/**
+ * Validates whether a public key string is configured and valid (non-zero 64 hex chars)
+ */
+function getEffectivePublicKey(overrideKey) {
+  const key = overrideKey !== undefined ? overrideKey : process.env.ALCO_LICENSE_PUBLIC_KEY;
+  if (!key || typeof key !== 'string') {
+    return null;
+  }
+  const trimmed = key.trim();
+  // Must be exactly 64 hex characters (32 bytes raw Ed25519 public key)
+  if (trimmed.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return null;
+  }
+  // Zero key (all zeros) is strictly disallowed
+  if (/^0{64}$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
+ * Validates Device ID against official ALCO standard: ALCO-DEV-XXXX-XXXX-XXXX
+ */
+function validateDeviceId(deviceId) {
+  if (!deviceId || typeof deviceId !== 'string') return false;
+  return /^ALCO-DEV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(deviceId);
+}
+
+/**
+ * Reads machine ID if available in OS
+ */
+function getOsMachineId() {
+  try {
+    if (process.platform === 'linux') {
+      if (fs.existsSync('/etc/machine-id')) {
+        const id = fs.readFileSync('/etc/machine-id', 'utf8').trim();
+        if (id) return id;
+      }
+      if (fs.existsSync('/var/lib/dbus/machine-id')) {
+        const id = fs.readFileSync('/var/lib/dbus/machine-id', 'utf8').trim();
+        if (id) return id;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Retrieves the primary physical network MAC address
+ */
+function getPrimaryMac() {
   try {
     const nets = os.networkInterfaces();
-    const macs = [];
-    for (const name of Object.keys(nets)) {
+    const candidateMacs = [];
+    for (const name of Object.keys(nets).sort()) {
       for (const net of nets[name] || []) {
         if (!net.internal && net.mac && net.mac !== '00:00:00:00:00:00') {
-          macs.push(net.mac);
+          candidateMacs.push(net.mac.toLowerCase());
         }
       }
     }
-    macs.sort();
-    if (macs.length > 0) traits.push(macs.join(','));
-  } catch (err) {
-    // Ignore network interface access errors
+    if (candidateMacs.length > 0) {
+      candidateMacs.sort();
+      return candidateMacs[0];
+    }
+  } catch (_) {}
+  return '00:00:00:00:00:00';
+}
+
+/**
+ * Generates official Device ID: ALCO-DEV-XXXX-XXXX-XXXX
+ * Stable across app restarts and updates.
+ * Excludes fragile components (hostname, homedir, RAM, full volatile CPU model).
+ */
+function generateDeviceId() {
+  const machineId = getOsMachineId();
+  const primaryMac = getPrimaryMac();
+  const coreCount = os.cpus()?.length || 1;
+
+  const seed = machineId
+    ? `ALCO|${process.platform}|${process.arch}|${machineId}`
+    : `ALCO|${process.platform}|${process.arch}|${primaryMac}|${coreCount}`;
+
+  const hashHex = crypto.createHash('sha256').update(seed).digest('hex').toUpperCase();
+  const p1 = hashHex.substring(0, 4);
+  const p2 = hashHex.substring(4, 8);
+  const p3 = hashHex.substring(8, 12);
+  return `ALCO-DEV-${p1}-${p2}-${p3}`;
+}
+
+/**
+ * Canonical JSON Serializer (RFC 8785 Compliant)
+ * Matches src/modules/canonical.ts of ALCO License Generator
+ */
+function canonicalizeJSON(val, seen = new WeakSet()) {
+  // 1. null
+  if (val === null) {
+    return 'null';
   }
 
-  const rawString = traits.join('|');
-  const hashHex = crypto.createHash('sha256').update(rawString).digest('hex').substring(0, 32).toUpperCase();
-  return `ALCO-DEV-${hashHex}`;
-}
+  // 2. toJSON
+  if (val !== null && typeof val === 'object' && typeof val.toJSON === 'function') {
+    val = val.toJSON();
+    if (val === null) return 'null';
+  }
 
-/**
- * Generate official Request Code format for ALCO License Generator
- */
-function generateRequestCode(deviceId) {
-  const payload = {
-    appId: TARGET_APP_ID,
-    deviceId: deviceId || generateDeviceId(),
-    requestId: 'REQ-' + crypto.randomBytes(6).toString('hex').toUpperCase(),
-    version: 'v1',
-    requestedAt: new Date().toISOString(),
-  };
+  // 3. undefined, function, symbol at top-level
+  if (val === undefined || typeof val === 'function' || typeof val === 'symbol') {
+    return undefined;
+  }
 
-  const jsonStr = JSON.stringify(payload);
-  const base64Url = Buffer.from(jsonStr, 'utf-8').toString('base64url');
-  return `ALCO-REQ-v1.${base64Url}`;
-}
+  // 4. boolean
+  if (typeof val === 'boolean') {
+    return val ? 'true' : 'false';
+  }
 
-/**
- * Deterministic Canonical JSON Serializer
- * Ensures exact key ordering and canonical byte representations for Ed25519 verification
- */
-function canonicalizeJSON(val) {
-  if (val === null || typeof val !== 'object') {
+  // 5. number: finite numbers only
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) {
+      throw new TypeError('Canonical error: Numbers must be finite (NaN and Infinity not allowed)');
+    }
+    return Object.is(val, -0) ? '-0' : JSON.stringify(val);
+  }
+
+  // 6. string: Unicode & escaping
+  if (typeof val === 'string') {
     return JSON.stringify(val);
   }
+
+  // 7. Array
   if (Array.isArray(val)) {
-    return '[' + val.map(item => canonicalizeJSON(item)).join(',') + ']';
+    if (seen.has(val)) {
+      throw new TypeError('Canonical error: Circular reference detected in array');
+    }
+    seen.add(val);
+    const items = val.map(item => {
+      if (item === undefined || typeof item === 'function' || typeof item === 'symbol') {
+        return 'null';
+      }
+      const serialized = canonicalizeJSON(item, seen);
+      return serialized === undefined ? 'null' : serialized;
+    });
+    seen.delete(val);
+    return '[' + items.join(',') + ']';
   }
-  const keys = Object.keys(val)
-    .filter(k => val[k] !== undefined && typeof val[k] !== 'function' && typeof val[k] !== 'symbol')
-    .sort();
-  const pairs = keys.map(k => JSON.stringify(k) + ':' + canonicalizeJSON(val[k]));
-  return '{' + pairs.join(',') + '}';
+
+  // 8. Object
+  if (typeof val === 'object') {
+    if (seen.has(val)) {
+      throw new TypeError('Canonical error: Circular reference detected in object');
+    }
+    seen.add(val);
+
+    // Lexicographical UTF-16 code unit ordering
+    const sortedKeys = Object.keys(val).sort();
+    const entries = [];
+
+    for (const key of sortedKeys) {
+      const propVal = val[key];
+      // Omit keys where value is undefined, function, or symbol
+      if (propVal === undefined || typeof propVal === 'function' || typeof propVal === 'symbol') {
+        continue;
+      }
+      const serializedVal = canonicalizeJSON(propVal, seen);
+      if (serializedVal !== undefined) {
+        entries.push(JSON.stringify(key) + ':' + serializedVal);
+      }
+    }
+
+    seen.delete(val);
+    return '{' + entries.join(',') + '}';
+  }
+
+  return JSON.stringify(val);
+}
+
+/**
+ * Computes official checksum for Request Code data
+ */
+function computeRequestCodeChecksum(base64UrlData) {
+  const buf = Buffer.from(base64UrlData, 'utf-8');
+  return zlib.crc32(buf).toString(16).padStart(8, '0').toUpperCase();
+}
+
+/**
+ * Verifies checksum of Request Code
+ */
+function verifyRequestCodeChecksum(base64UrlData, checksum) {
+  if (!checksum || typeof checksum !== 'string') return false;
+  const expectedCrc = computeRequestCodeChecksum(base64UrlData);
+  const expectedSha = crypto.createHash('sha256').update(base64UrlData).digest('hex').substring(0, 8).toUpperCase();
+  const normalized = checksum.trim().toUpperCase();
+  return normalized === expectedCrc || normalized === expectedSha;
+}
+
+/**
+ * Generates official Request Code format: ALCO-REQ-v1.<Base64UrlData>.<Checksum>
+ * Payload fields: v, app, dev, cust, name, req, ts, notes
+ */
+function generateRequestCode(deviceId, options = {}) {
+  const targetDevId = deviceId || generateDeviceId();
+  const payload = {
+    v: EXACT_LICENSE_VERSION,
+    app: TARGET_APP_ID,
+    dev: targetDevId,
+    cust: typeof options.cust === 'string' ? options.cust : '',
+    name: typeof options.name === 'string' ? options.name : '',
+    req: typeof options.req === 'string' ? options.req : ('REQ-' + crypto.randomBytes(6).toString('hex').toUpperCase()),
+    ts: typeof options.ts === 'string' ? options.ts : new Date().toISOString(),
+    notes: typeof options.notes === 'string' ? options.notes : '',
+  };
+
+  const jsonStr = canonicalizeJSON(payload);
+  const base64UrlData = Buffer.from(jsonStr, 'utf-8').toString('base64url');
+  const checksum = computeRequestCodeChecksum(base64UrlData);
+  return `ALCO-REQ-v1.${base64UrlData}.${checksum}`;
+}
+
+/**
+ * Decodes and verifies official Request Code string
+ */
+function decodeRequestCode(requestCode) {
+  if (!requestCode || typeof requestCode !== 'string') {
+    return { valid: false, error: 'Request code kosong atau tidak valid.' };
+  }
+  const parts = requestCode.trim().split('.');
+  if (parts.length !== 3) {
+    return { valid: false, error: 'Request code harus memiliki 3 segmen (ALCO-REQ-v1.<Base64UrlData>.<Checksum>).' };
+  }
+
+  const [prefix, base64UrlData, checksum] = parts;
+  if (prefix !== 'ALCO-REQ-v1') {
+    return { valid: false, error: 'Prefix Request Code tidak dikenali.' };
+  }
+
+  if (!verifyRequestCodeChecksum(base64UrlData, checksum)) {
+    return { valid: false, error: 'Checksum Request Code tidak valid.' };
+  }
+
+  try {
+    const jsonStr = Buffer.from(base64UrlData, 'base64url').toString('utf-8');
+    const payload = JSON.parse(jsonStr);
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { valid: false, error: 'Payload Request Code tidak valid.' };
+    }
+
+    const appId = payload.app || payload.appId;
+    const devId = payload.dev || payload.deviceId;
+    const reqId = payload.req || payload.requestId;
+
+    return {
+      valid: true,
+      appId,
+      deviceId: devId,
+      requestId: reqId,
+      payload: {
+        v: payload.v || '1.0',
+        app: appId,
+        dev: devId,
+        cust: payload.cust || '',
+        name: payload.name || '',
+        req: reqId,
+        ts: payload.ts || '',
+        notes: payload.notes || '',
+      },
+      checksum,
+    };
+  } catch (err) {
+    return { valid: false, error: 'Gagal membaca payload Request Code.' };
+  }
+}
+
+/**
+ * Strict License Payload Schema Validation
+ * Identical behavior to validateLicensePayloadSchema() of ALCO License Generator
+ */
+function validateLicensePayloadSchema(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'Payload lisensi harus berupa objek JSON valid.' };
+  }
+
+  const {
+    licenseVersion,
+    licenseId,
+    appId,
+    deviceId,
+    customerId,
+    customerName,
+    plan,
+    features,
+    licenseType,
+    issuedAt,
+    expiresAt,
+    metadata,
+  } = payload;
+
+  // 1. licenseVersion must be EXACT "1.0"
+  if (licenseVersion !== EXACT_LICENSE_VERSION) {
+    return { valid: false, code: STATUS_CODES.UNSUPPORTED_LICENSE_VERSION, error: `Versi lisensi tidak didukung (harus "${EXACT_LICENSE_VERSION}").` };
+  }
+
+  // 2. licenseId: non-empty string
+  if (typeof licenseId !== 'string' || licenseId.trim().length === 0 || licenseId.length > 256) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'licenseId tidak valid.' };
+  }
+
+  // 3. appId: non-empty string
+  if (typeof appId !== 'string' || appId.trim().length === 0 || appId.length > 128) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'appId tidak valid.' };
+  }
+
+  // 4. Target appId check
+  if (appId !== TARGET_APP_ID) {
+    return { valid: false, code: STATUS_CODES.WRONG_APP, error: `Lisensi ini untuk '${appId}', bukan '${TARGET_APP_ID}'.` };
+  }
+
+  // 5. deviceId: official format ALCO-DEV-XXXX-XXXX-XXXX
+  if (typeof deviceId !== 'string' || !validateDeviceId(deviceId)) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'deviceId lisensi tidak sesuai format resmi ALCO-DEV-XXXX-XXXX-XXXX.' };
+  }
+
+  // 6. customerId: non-empty string
+  if (typeof customerId !== 'string' || customerId.trim().length === 0 || customerId.length > 128) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'customerId tidak valid.' };
+  }
+
+  // 7. customerName: string if provided
+  if (customerName !== undefined && typeof customerName !== 'string') {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'customerName harus berupa string.' };
+  }
+
+  // 8. plan: starter | pro | enterprise | custom
+  if (typeof plan !== 'string' || !ALLOWED_PLANS.includes(plan.toLowerCase())) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'plan lisensi tidak valid.' };
+  }
+
+  // 9. features: Array<string> and EVERY item must be string
+  if (!Array.isArray(features) || !features.every(f => typeof f === 'string')) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'features harus berupa Array<string>.' };
+  }
+
+  // 10. licenseType: lifetime | subscription
+  if (licenseType !== 'lifetime' && licenseType !== 'subscription') {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'licenseType harus "lifetime" atau "subscription".' };
+  }
+
+  // 11. issuedAt: valid ISO date string
+  if (typeof issuedAt !== 'string' || isNaN(new Date(issuedAt).getTime())) {
+    return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'issuedAt harus berupa tanggal ISO valid.' };
+  }
+
+  // 12. expiresAt rules:
+  // - lifetime: licenseType === "lifetime" AND expiresAt === null (undefined strictly rejected)
+  if (licenseType === 'lifetime') {
+    if (expiresAt !== null) {
+      return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'Lisensi lifetime wajib memiliki expiresAt === null.' };
+    }
+  } else if (licenseType === 'subscription') {
+    // - subscription: expiresAt must be valid date string and not expired
+    if (typeof expiresAt !== 'string' || isNaN(new Date(expiresAt).getTime())) {
+      return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'Lisensi subscription wajib memiliki tanggal expiresAt yang valid.' };
+    }
+    if (new Date(expiresAt).getTime() <= Date.now()) {
+      return { valid: false, code: STATUS_CODES.EXPIRED_LICENSE, error: 'Masa berlaku lisensi subscription telah berakhir.' };
+    }
+  }
+
+  // 13. metadata: must be a plain object if provided
+  if (metadata !== undefined) {
+    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return { valid: false, code: STATUS_CODES.MALFORMED_LICENSE, error: 'metadata harus berupa object valid.' };
+    }
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -131,7 +447,7 @@ function verifyEd25519Signature(canonicalDataStr, signatureHex, publicKeyHex) {
 /**
  * Full Strict License Verification
  */
-function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex = DEFAULT_PUBLIC_KEY) {
+function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex) {
   if (!rawLicenseKey || typeof rawLicenseKey !== 'string') {
     return { status: STATUS_CODES.NO_LICENSE, error: 'Lisensi belum dimasukkan.' };
   }
@@ -147,7 +463,7 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex = DEFA
 
   const parts = trimmed.split('.');
   if (parts.length !== 3) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Format lisensi tidak valid (harus 3 bagian).' };
+    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Format lisensi tidak valid (harus 3 bagian: ALCO-LIC-v1.<payload>.<sig>).' };
   }
 
   const [headerPrefix, payloadB64Url, signatureHex] = parts;
@@ -157,7 +473,7 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex = DEFA
   }
 
   if (!signatureHex || signatureHex.length !== 128 || !/^[0-9a-fA-F]{128}$/.test(signatureHex)) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Signature lisensi tidak valid.' };
+    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Signature lisensi tidak valid (harus 128 karakter hex).' };
   }
 
   let payloadObj = null;
@@ -168,81 +484,35 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex = DEFA
     return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal membaca payload lisensi.' };
   }
 
-  if (!payloadObj || typeof payloadObj !== 'object') {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Payload lisensi tidak valid.' };
+  // Validate payload against official schema
+  const schemaValidation = validateLicensePayloadSchema(payloadObj);
+  if (!schemaValidation.valid) {
+    return { status: schemaValidation.code, error: schemaValidation.error };
   }
 
-  // Schema Validation
-  const {
-    licenseVersion,
-    licenseId,
-    appId,
-    deviceId,
-    customerId,
-    plan,
-    features,
-    licenseType,
-    expiresAt,
-  } = payloadObj;
-
-  if (!licenseVersion || !SUPPORTED_LICENSE_VERSIONS.includes(String(licenseVersion))) {
-    return { status: STATUS_CODES.UNSUPPORTED_LICENSE_VERSION, error: 'Versi lisensi tidak didukung.' };
-  }
-
-  if (!licenseId || typeof licenseId !== 'string') {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'License ID tidak valid.' };
-  }
-
-  if (!appId || typeof appId !== 'string') {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'App ID tidak ditemukan.' };
-  }
-
-  if (appId !== TARGET_APP_ID) {
-    return { status: STATUS_CODES.WRONG_APP, error: `Lisensi ini diperuntukkan untuk aplikasi '${appId}', bukan '${TARGET_APP_ID}'.` };
-  }
-
-  if (!deviceId || typeof deviceId !== 'string') {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Device ID tidak ditemukan dalam lisensi.' };
-  }
-
-  if (deviceId !== currentDeviceId) {
+  // Verify device binding
+  if (payloadObj.deviceId !== currentDeviceId) {
     return { status: STATUS_CODES.WRONG_DEVICE, error: 'Lisensi ini terikat untuk perangkat lain.' };
   }
 
-  if (!plan || !['starter', 'pro', 'enterprise', 'custom'].includes(String(plan).toLowerCase())) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Paket lisensi (plan) tidak valid.' };
-  }
-
-  if (!Array.isArray(features)) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Daftar fitur (features) tidak valid.' };
-  }
-
-  if (!licenseType || !['lifetime', 'subscription'].includes(String(licenseType).toLowerCase())) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Tipe lisensi tidak valid.' };
-  }
-
-  // Expiration Rules
-  if (licenseType === 'lifetime') {
-    if (expiresAt !== null && expiresAt !== undefined) {
-      return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Lisensi lifetime tidak boleh memiliki tanggal kadaluarsa.' };
-    }
-  } else if (licenseType === 'subscription') {
-    if (!expiresAt) {
-      return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Lisensi berlangganan harus memiliki tanggal kadaluarsa.' };
-    }
-    const expTime = new Date(expiresAt).getTime();
-    if (isNaN(expTime)) {
-      return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Format tanggal kadaluarsa tidak valid.' };
-    }
-    if (expTime <= Date.now()) {
-      return { status: STATUS_CODES.EXPIRED_LICENSE, error: 'Masa berlaku lisensi berlangganan telah berakhir.' };
-    }
+  // Public key verification - fail closed if unconfigured or zero key
+  const effectivePublicKey = getEffectivePublicKey(publicKeyHex);
+  if (!effectivePublicKey) {
+    return {
+      status: STATUS_CODES.CONFIGURATION_ERROR,
+      error: 'Public key verifikasi lisensi belum dikonfigurasi (ALCO_LICENSE_PUBLIC_KEY tidak ditemukan atau masih default zero key). Hubungi Aladzan Corpora.',
+    };
   }
 
   // Signature verification using canonical payload bytes
-  const canonicalStr = canonicalizeJSON(payloadObj);
-  const isSigValid = verifyEd25519Signature(canonicalStr, signatureHex, publicKeyHex);
+  let canonicalStr;
+  try {
+    canonicalStr = canonicalizeJSON(payloadObj);
+  } catch (err) {
+    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal melakukan kanonikalisasi payload lisensi.' };
+  }
 
+  const isSigValid = verifyEd25519Signature(canonicalStr, signatureHex, effectivePublicKey);
   if (!isSigValid) {
     return { status: STATUS_CODES.INVALID_SIGNATURE, error: 'Tanda tangan digital (signature) lisensi tidak valid atau telah dimodifikasi.' };
   }
@@ -255,16 +525,16 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex = DEFA
 }
 
 /**
- * License Storage Path
+ * Storage Path for persistent license
  */
 function getStoragePath(userDataDir) {
   return path.join(userDataDir, 'alco-license.json');
 }
 
 /**
- * Read and verify stored license key
+ * Read and re-evaluate stored license key on startup
  */
-function evaluateStoredLicense(userDataDir, publicKeyHex = DEFAULT_PUBLIC_KEY) {
+function evaluateStoredLicense(userDataDir, publicKeyHex) {
   const deviceId = generateDeviceId();
   const requestCode = generateRequestCode(deviceId);
   const storagePath = getStoragePath(userDataDir);
@@ -305,9 +575,9 @@ function evaluateStoredLicense(userDataDir, publicKeyHex = DEFAULT_PUBLIC_KEY) {
 }
 
 /**
- * Save new license key to storage
+ * Save and verify new license key
  */
-function saveLicenseKey(userDataDir, rawLicenseKey, publicKeyHex = DEFAULT_PUBLIC_KEY) {
+function saveLicenseKey(userDataDir, rawLicenseKey, publicKeyHex) {
   const deviceId = generateDeviceId();
   const requestCode = generateRequestCode(deviceId);
   const storagePath = getStoragePath(userDataDir);
@@ -357,10 +627,18 @@ function removeStoredLicense(userDataDir) {
 
 module.exports = {
   TARGET_APP_ID,
+  EXACT_LICENSE_VERSION,
   STATUS_CODES,
+  ALLOWED_PLANS,
+  getEffectivePublicKey,
+  validateDeviceId,
   generateDeviceId,
-  generateRequestCode,
   canonicalizeJSON,
+  computeRequestCodeChecksum,
+  verifyRequestCodeChecksum,
+  generateRequestCode,
+  decodeRequestCode,
+  validateLicensePayloadSchema,
   verifyEd25519Signature,
   verifyLicenseString,
   evaluateStoredLicense,
