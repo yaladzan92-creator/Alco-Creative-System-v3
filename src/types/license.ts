@@ -13,7 +13,8 @@ export interface RequestCodePayload {
   v: string;
   app: string;
   dev: string;
-  cust: string;
+  cust?: string;
+  email?: string;
   name: string;
   req: string;
   ts: string;
@@ -48,7 +49,7 @@ export interface LicenseEvaluationResult {
 export interface AlcoLicenseAPI {
   getStatus: () => Promise<LicenseEvaluationResult>;
   getDeviceId: () => Promise<string>;
-  getRequestCode: (options: { cust: string; name?: string; req?: string; ts?: string; notes?: string }) => Promise<string>;
+  getRequestCode: (options: { name: string; email: string; req?: string; ts?: string; notes?: string }) => Promise<string>;
   activate: (licenseKey: string) => Promise<LicenseEvaluationResult>;
   removeLicense: () => Promise<LicenseEvaluationResult>;
   isElectron: boolean;

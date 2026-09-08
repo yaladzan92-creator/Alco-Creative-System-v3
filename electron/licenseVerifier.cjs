@@ -7,7 +7,7 @@
  * - License Format: ALCO-LIC-v1.<Base64UrlPayload>.<SignatureHex>
  * - Payload licenseVersion: EXACT "1.0"
  * - Device ID Format: ALCO-DEV-XXXX-XXXX-XXXX
- * - Request Code Format: ALCO-REQ-v1.<Base64UrlData>.<Checksum>
+ * - Request Code Format: ALCO-REQ-v2.<Base64UrlData>.<Checksum>
  * - Public Key: Ed25519 32-byte raw public key (64 hex characters)
  */
 
@@ -242,19 +242,23 @@ function verifyRequestCodeChecksum(base64UrlData, checksum) {
  */
 function generateRequestCode(deviceId, options = {}) {
   const targetDevId = deviceId || generateDeviceId();
-  const customerId = typeof options.cust === 'string' ? options.cust.trim() : '';
-  if (!customerId) {
-    throw new Error('customerId/cust wajib diisi sebelum Request Code dibuat.');
+  const customerName = typeof options.name === 'string' ? options.name.trim() : '';
+  const customerEmail = typeof options.email === 'string' ? options.email.trim().toLowerCase() : '';
+  if (!customerName) {
+    throw new Error('Nama customer wajib diisi sebelum Request Code dibuat.');
+  }
+  if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+    throw new Error('Email customer valid wajib diisi sebelum Request Code dibuat.');
   }
   if (!validateDeviceId(targetDevId)) {
     throw new Error(`Cannot encode Request Code: invalid hardware device ID format "${targetDevId}"`);
   }
   const payload = {
-    v: EXACT_LICENSE_VERSION,
+    v: '2.0',
     app: TARGET_APP_ID,
     dev: targetDevId.trim(),
-    cust: customerId,
-    name: typeof options.name === 'string' ? options.name.trim() : '',
+    email: customerEmail,
+    name: customerName,
     req: typeof options.req === 'string' ? options.req.trim() : ('REQ-' + crypto.randomBytes(6).toString('hex').toUpperCase()),
     ts: typeof options.ts === 'string' ? options.ts.trim() : new Date().toISOString(),
     notes: typeof options.notes === 'string' ? options.notes.trim() : '',
@@ -263,7 +267,7 @@ function generateRequestCode(deviceId, options = {}) {
   const jsonStr = JSON.stringify(payload);
   const base64UrlData = Buffer.from(jsonStr, 'utf-8').toString('base64url');
   const checksum = computeRequestCodeChecksum(base64UrlData);
-  return `ALCO-REQ-v1.${base64UrlData}.${checksum}`;
+  return `ALCO-REQ-v2.${base64UrlData}.${checksum}`;
 }
 
 /**
@@ -279,7 +283,7 @@ function decodeRequestCode(requestCode) {
   }
 
   const [prefix, base64UrlData, checksum] = parts;
-  if (prefix !== 'ALCO-REQ-v1') {
+  if (prefix !== 'ALCO-REQ-v1' && prefix !== 'ALCO-REQ-v2') {
     return { valid: false, error: 'Prefix Request Code tidak dikenali.' };
   }
 
@@ -295,9 +299,13 @@ function decodeRequestCode(requestCode) {
       return { valid: false, error: 'Payload Request Code tidak valid.' };
     }
 
+    const isV2 = prefix === 'ALCO-REQ-v2';
     const appId = payload.app || payload.appId;
     const devId = payload.dev || payload.deviceId;
     const reqId = payload.req || payload.requestId;
+    if (!appId || !devId || !reqId || (isV2 && (!payload.name || !payload.email)) || (!isV2 && !payload.cust)) {
+      return { valid: false, error: 'Payload Request Code tidak lengkap.' };
+    }
 
     return {
       valid: true,
@@ -305,10 +313,11 @@ function decodeRequestCode(requestCode) {
       deviceId: devId,
       requestId: reqId,
       payload: {
-        v: payload.v || '1.0',
+        v: payload.v || (isV2 ? '2.0' : '1.0'),
         app: appId,
         dev: devId,
         cust: payload.cust || '',
+        email: payload.email || '',
         name: payload.name || '',
         req: reqId,
         ts: payload.ts || '',

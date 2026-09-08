@@ -56,22 +56,24 @@ function generatorChecksum(str) {
 
 function generatorDecodeRequestCode(rawInput) {
   const trimmed = rawInput.trim();
-  if (!trimmed.startsWith('ALCO-REQ-v1.')) return { success: false };
+  if (!trimmed.startsWith('ALCO-REQ-v1.') && !trimmed.startsWith('ALCO-REQ-v2.')) return { success: false };
   const parts = trimmed.split('.');
   if (parts.length !== 3) return { success: false };
   const [, b64Data, checksum] = parts;
   if (checksum.toUpperCase() !== generatorChecksum(b64Data).toUpperCase()) return { success: false };
   const parsed = JSON.parse(Buffer.from(b64Data, 'base64url').toString('utf-8'));
-  if (!parsed.app || !parsed.dev || !parsed.cust) return { success: false };
+  const isV2 = parts[0] === 'ALCO-REQ-v2';
+  if (!parsed.app || !parsed.dev || (isV2 ? (!parsed.name || !parsed.email) : !parsed.cust)) return { success: false };
   if (!validateDeviceId(String(parsed.dev).trim())) return { success: false };
   return {
     success: true,
     data: {
-      version: parsed.v || '1.0',
+      version: parsed.v || (isV2 ? '2.0' : '1.0'),
       appId: String(parsed.app).trim(),
       deviceId: String(parsed.dev).trim(),
-      customerId: String(parsed.cust).trim(),
+      customerId: parsed.cust ? String(parsed.cust).trim() : undefined,
       customerName: parsed.name ? String(parsed.name).trim() : '',
+      customerEmail: parsed.email ? String(parsed.email).trim() : undefined,
       requestId: parsed.req ? String(parsed.req).trim() : `REQ-${Date.now().toString(36).toUpperCase()}`,
       timestamp: parsed.ts ? String(parsed.ts).trim() : new Date().toISOString(),
       notes: parsed.notes ? String(parsed.notes).trim() : ''
@@ -107,13 +109,13 @@ assert(/^ALCO-DEV-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(currentDeviceId), '
 // 3. Request Code punya 3 segmen
 const reqCode = generateRequestCode(currentDeviceId, {
   name: 'Aladzan',
-  cust: 'CUST-01',
+  email: 'Owner@Example.COM',
   req: 'REQ-PARITY-01',
   ts: '2026-09-08T00:00:00.000Z',
   notes: 'Parity test'
 });
 const reqParts = reqCode.split('.');
-assert(reqParts.length === 3 && reqParts[0] === 'ALCO-REQ-v1', 'Test 3: Request Code punya 3 segmen (ALCO-REQ-v1.<data>.<checksum>)');
+assert(reqParts.length === 3 && reqParts[0] === 'ALCO-REQ-v2', 'Test 3: Request Code punya 3 segmen (ALCO-REQ-v2.<data>.<checksum>)');
 
 // 4. Request Code checksum valid
 assert(
@@ -132,19 +134,19 @@ assert(
   internalDecodedReq.valid === true &&
   decodedReq.data.appId === TARGET_APP_ID &&
   decodedReq.data.deviceId === currentDeviceId &&
-  decodedReq.data.customerId === 'CUST-01' &&
+  decodedReq.data.customerEmail === 'owner@example.com' &&
   decodedReq.data.requestId === 'REQ-PARITY-01' &&
-  requestJson === '{"v":"1.0","app":"alco-creative-system","dev":"' + currentDeviceId + '","cust":"CUST-01","name":"Aladzan","req":"REQ-PARITY-01","ts":"2026-09-08T00:00:00.000Z","notes":"Parity test"}',
-  'Test 5: Request Code bisa decode generator, cust truthy, dan JSON field order identik'
+  requestJson === '{"v":"2.0","app":"alco-creative-system","dev":"' + currentDeviceId + '","email":"owner@example.com","name":"Aladzan","req":"REQ-PARITY-01","ts":"2026-09-08T00:00:00.000Z","notes":"Parity test"}',
+  'Test 5: Request Code v2 bisa decode generator, name/email truthy, dan JSON field order identik'
 );
 
-let missingCustRejected = false;
+let missingIdentityRejected = false;
 try {
   generateRequestCode(currentDeviceId);
 } catch {
-  missingCustRejected = true;
+  missingIdentityRejected = true;
 }
-assert(missingCustRejected, 'Test 5b: Request Code final tidak dibuat tanpa customerId/cust');
+assert(missingIdentityRejected, 'Test 5b: Request Code final tidak dibuat tanpa name/email');
 
 // 6. exact appId alco-creative-system
 const baseValidPayload = {

@@ -59,8 +59,8 @@ const ERROR_LABELS: Record<LicenseStatusCode, { title: string; desc: string; bad
 
 export default function LicenseActivationScreen({ licenseState, onRefresh }: LicenseActivationScreenProps) {
   const [licenseInput, setLicenseInput] = useState('');
-  const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [requestCode, setRequestCode] = useState(licenseState.requestCode || '');
   const [loading, setLoading] = useState(false);
   const [requestLoading, setRequestLoading] = useState(false);
@@ -88,8 +88,12 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
   };
 
   const handleGenerateReqCode = async () => {
-    if (!customerId.trim()) {
-      toast.error('Isi Customer ID terlebih dahulu');
+    if (!customerName.trim()) {
+      toast.error('Isi nama terlebih dahulu');
+      return;
+    }
+    if (!customerEmail.trim()) {
+      toast.error('Isi email terlebih dahulu');
       return;
     }
     if (!window.alcoLicense) {
@@ -99,8 +103,8 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
     setRequestLoading(true);
     try {
       const code = await window.alcoLicense.getRequestCode({
-        cust: customerId.trim(),
         name: customerName.trim(),
+        email: customerEmail.trim(),
       });
       setRequestCode(code);
       toast.success('Request Code resmi berhasil dibuat.');
@@ -247,27 +251,28 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
             </div>
             <div className="grid grid-cols-1 gap-2">
               <input
-                value={customerId}
-                onChange={(e) => {
-                  setCustomerId(e.target.value);
-                  setRequestCode('');
-                }}
-                placeholder="Customer ID dari owner"
-                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-              <input
                 value={customerName}
                 onChange={(e) => {
                   setCustomerName(e.target.value);
                   setRequestCode('');
                 }}
-                placeholder="Nama customer (opsional)"
+                placeholder="Nama lengkap / nama bisnis"
+                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <input
+                type="email"
+                value={customerEmail}
+                onChange={(e) => {
+                  setCustomerEmail(e.target.value);
+                  setRequestCode('');
+                }}
+                placeholder="Email aktif"
                 className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
               <button
                 type="button"
                 onClick={handleGenerateReqCode}
-                disabled={requestLoading || !customerId.trim()}
+                disabled={requestLoading || !customerName.trim() || !customerEmail.trim()}
                 className="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
               >
                 {requestLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
@@ -275,7 +280,7 @@ export default function LicenseActivationScreen({ licenseState, onRefresh }: Lic
               </button>
             </div>
             <div className="font-mono text-[11px] text-slate-300 bg-slate-900 px-3 py-2 rounded-xl border border-slate-800/80 truncate select-all">
-              {requestCode || 'Isi Customer ID lalu buat Request Code'}
+              {requestCode || 'Isi nama dan email lalu buat Request Code'}
             </div>
             <p className="text-[10px] text-slate-500 leading-snug">
               Berikan Request Code ini kepada owner untuk membuat License Key resmi.
