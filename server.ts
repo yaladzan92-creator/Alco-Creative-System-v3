@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -10,6 +11,14 @@ import cors from "cors";
 
 dotenv.config();
 
+const currentFilename = typeof __filename !== "undefined"
+  ? __filename
+  : (typeof import.meta !== "undefined" && import.meta.url ? fileURLToPath(import.meta.url) : "");
+
+const serverDirname = currentFilename
+  ? path.dirname(currentFilename)
+  : (typeof __dirname !== "undefined" ? __dirname : process.cwd());
+
 // Load dynamic config from firebase-applet-config.json
 let firebaseProjectId = "divine-function-j07pf";
 let firestoreDatabaseId: string | undefined = undefined;
@@ -17,8 +26,8 @@ let firestoreDatabaseId: string | undefined = undefined;
 try {
   const configPath = (process.env.FIREBASE_CONFIG_PATH && fs.existsSync(process.env.FIREBASE_CONFIG_PATH))
     ? process.env.FIREBASE_CONFIG_PATH
-    : fs.existsSync(path.join(__dirname, "firebase-applet-config.json"))
-      ? path.join(__dirname, "firebase-applet-config.json")
+    : fs.existsSync(path.join(serverDirname, "firebase-applet-config.json"))
+      ? path.join(serverDirname, "firebase-applet-config.json")
       : path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
     const configData = JSON.parse(fs.readFileSync(configPath, "utf-8"));
@@ -966,8 +975,8 @@ async function startServer() {
     // In production, locate the static build directory
     const distPath = process.env.APP_SERVER_DIR && fs.existsSync(path.join(process.env.APP_SERVER_DIR, "index.html"))
       ? process.env.APP_SERVER_DIR
-      : fs.existsSync(path.join(__dirname, "index.html"))
-        ? __dirname
+      : fs.existsSync(path.join(serverDirname, "index.html"))
+        ? serverDirname
         : path.join(process.cwd(), "dist");
     
     app.use(express.static(distPath));

@@ -14,9 +14,12 @@ import { Toaster } from "@/components/ui/sonner";
 import { BrandingProvider, useBranding } from "@/contexts/BrandingContext";
 import WorkflowWizard from "@/pages/WorkflowWizard";
 import ApiAccess from "@/pages/ApiAccess";
-import { Zap, Menu } from "lucide-react";
+import { Zap, Menu, ShieldCheck, ShieldAlert, Monitor } from "lucide-react";
 import { promptApiKey } from "@/services/aiService";
 import ApiKeyModal from "@/components/common/ApiKeyModal";
+import LicenseActivationScreen from "@/components/license/LicenseActivationScreen";
+import LicenseInfoModal from "@/components/license/LicenseInfoModal";
+import { LicenseEvaluationResult } from "@/types/license";
 
 function MainAppLayout({
   sidebarOpen,
@@ -24,15 +27,20 @@ function MainAppLayout({
   toggleSidebar,
   config,
   hasApiKey,
+  licenseState,
+  onRefreshLicense,
 }: {
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSidebar: () => void;
   config: any;
   hasApiKey: boolean;
+  licenseState: LicenseEvaluationResult | null;
+  onRefreshLicense: () => void;
 }) {
   const location = useLocation();
   const isWorkflowRoute = location.pathname.startsWith("/wizard");
+  const [showLicenseModal, setShowLicenseModal] = React.useState(false);
 
   // Auto-collapse sidebar when entering workflow/UGC area (/wizard/...)
   // or auto-close sidebar on mobile/tablet when route changes
@@ -77,6 +85,37 @@ function MainAppLayout({
             </div>
 
             <div className="flex items-center gap-2">
+              {/* ALCO License Status Badge */}
+              {licenseState ? (
+                licenseState.status === "LICENSE_VALID" ? (
+                  <button
+                    onClick={() => setShowLicenseModal(true)}
+                    title="Lisensi ALCO Terverifikasi Resmi (Klik untuk detail)"
+                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">ALCO License: {licenseState.payload?.plan?.toUpperCase()}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowLicenseModal(true)}
+                    title="Lisensi Tidak Valid / Belum Teraktivasi"
+                    className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-xl border border-rose-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer animate-pulse"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Lisensi: {licenseState.status}</span>
+                  </button>
+                )
+              ) : (
+                <span
+                  title="Aplikasi berjalan dalam mode Web Browser Preview. Penegakan Lisensi berlaku di Electron Desktop Build."
+                  className="text-[10px] font-semibold text-slate-500 bg-slate-500/10 px-2.5 py-1 rounded-xl border border-slate-500/20 flex items-center gap-1.5"
+                >
+                  <Monitor className="w-3 h-3" />
+                  <span className="hidden md:inline">Browser Preview Mode</span>
+                </span>
+              )}
+
               {/* Subtle contextual AI status indicator */}
               {hasApiKey ? (
                 <button
@@ -125,6 +164,15 @@ function MainAppLayout({
           </Routes>
         </main>
       </div>
+
+      {licenseState && (
+        <LicenseInfoModal
+          isOpen={showLicenseModal}
+          onClose={() => setShowLicenseModal(false)}
+          licenseState={licenseState}
+          onRefresh={onRefreshLicense}
+        />
+      )}
     </div>
   );
 }
@@ -140,6 +188,38 @@ function AppContent() {
     }
     return false;
   });
+
+  // License state management for Electron desktop
+  const [licenseState, setLicenseState] = React.useState<LicenseEvaluationResult | null>(null);
+  const [licenseLoading, setLicenseLoading] = React.useState<boolean>(() => {
+    return typeof window !== "undefined" && !!window.alcoLicense;
+  });
+
+  const checkLicenseStatus = React.useCallback(async () => {
+    if (typeof window !== "undefined" && window.alcoLicense) {
+      setLicenseLoading(true);
+      try {
+        const res = await window.alcoLicense.getStatus();
+        setLicenseState(res);
+      } catch (err) {
+        console.error("Failed to check license status:", err);
+        setLicenseState({
+          status: "MALFORMED_LICENSE",
+          deviceId: "",
+          requestCode: "",
+          error: "Gagal memverifikasi status lisensi lokal.",
+        });
+      } finally {
+        setLicenseLoading(false);
+      }
+    } else {
+      setLicenseLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void checkLicenseStatus();
+  }, [checkLicenseStatus]);
 
   React.useEffect(() => {
     const handleAuthChange = (u: User | null) => {
@@ -198,7 +278,7 @@ function AppContent() {
     });
   };
 
-  if (authLoading || brandingLoading) {
+  if (authLoading || brandingLoading || licenseLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-background text-foreground font-heading" id="loading-spinner">
         <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center animate-pulse mb-4 overflow-hidden">
@@ -213,6 +293,17 @@ function AppContent() {
     );
   }
 
+  // ELECTRON DESKTOP LICENSE GATE
+  // If running in Electron and license status is NOT LICENSE_VALID, block the main app UI and render LicenseActivationScreen
+  if (licenseState && licenseState.status !== "LICENSE_VALID") {
+    return (
+      <LicenseActivationScreen
+        licenseState={licenseState}
+        onRefresh={() => { void checkLicenseStatus(); }}
+      />
+    );
+  }
+
   return (
     <BrowserRouter>
       <MainAppLayout
@@ -221,6 +312,8 @@ function AppContent() {
         toggleSidebar={toggleSidebar}
         config={config}
         hasApiKey={hasApiKey}
+        licenseState={licenseState}
+        onRefreshLicense={() => { void checkLicenseStatus(); }}
       />
       <ApiKeyModal />
       <Toaster theme="system" closeButton richColors />

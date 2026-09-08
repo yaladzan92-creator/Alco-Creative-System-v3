@@ -1,11 +1,43 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const http = require('http');
 const net = require('net');
+const {
+  evaluateStoredLicense,
+  generateDeviceId,
+  generateRequestCode,
+  saveLicenseKey,
+  removeStoredLicense,
+} = require('./licenseVerifier.cjs');
 
 let mainWindow = null;
 let serverProcess = null;
+
+// Register IPC handlers for ALCO License System
+ipcMain.handle('alco-license-get-status', async () => {
+  const userDataDir = app.getPath('userData');
+  return evaluateStoredLicense(userDataDir);
+});
+
+ipcMain.handle('alco-license-get-device-id', async () => {
+  return generateDeviceId();
+});
+
+ipcMain.handle('alco-license-get-request-code', async () => {
+  const deviceId = generateDeviceId();
+  return generateRequestCode(deviceId);
+});
+
+ipcMain.handle('alco-license-activate', async (_event, licenseKey) => {
+  const userDataDir = app.getPath('userData');
+  return saveLicenseKey(userDataDir, licenseKey);
+});
+
+ipcMain.handle('alco-license-remove', async () => {
+  const userDataDir = app.getPath('userData');
+  return removeStoredLicense(userDataDir);
+});
 
 function getFreePort(callback) {
   const server = net.createServer();
