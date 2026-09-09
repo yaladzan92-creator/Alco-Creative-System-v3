@@ -991,9 +991,42 @@ async function startServer() {
   const isElectronRun = process.env.ELECTRON_RUN === "true";
   const bindHost = isElectronRun ? "127.0.0.1" : "0.0.0.0";
 
-  app.listen(PORT, bindHost, () => {
+  const server = app.listen(PORT, bindHost, () => {
     console.log(`Server running at http://${bindHost}:${PORT}`);
   });
+
+  // Graceful shutdown handling to ensure no orphaned processes lock files on Windows / Electron
+  let isShuttingDown = false;
+  const gracefulShutdown = (source: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[Server] Graceful exit triggered by ${source}`);
+    try {
+      server.close(() => {
+        console.log("[Server] HTTP server listener closed.");
+        process.exit(0);
+      });
+    } catch {
+      process.exit(0);
+    }
+    // Hard fallback timeout to guarantee process termination and release file locks
+    setTimeout(() => {
+      process.exit(0);
+    }, 600).unref();
+  };
+
+  if (isElectronRun) {
+    // When parent Electron process disconnects or exits
+    process.on("disconnect", () => gracefulShutdown("IPC disconnect"));
+    process.on("message", (msg: unknown) => {
+      if (msg === "shutdown" || (typeof msg === "object" && msg !== null && (msg as { type?: string }).type === "shutdown")) {
+        gracefulShutdown("IPC shutdown message");
+      }
+    });
+  }
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
 // Cleanup removed global ai definition

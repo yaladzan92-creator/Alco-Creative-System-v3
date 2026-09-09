@@ -32,6 +32,51 @@ function writeStartupLog(message, error) {
   }
 }
 
+// Enforce single instance to prevent duplicate processes from locking files/ports
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+function stopServerProcess() {
+  if (!serverProcess) return;
+  const proc = serverProcess;
+  serverProcess = null;
+
+  try {
+    if (proc.connected) {
+      proc.send({ type: 'shutdown' });
+      proc.disconnect();
+    }
+  } catch (_e) {
+    // Ignore if IPC already closed
+  }
+
+  try {
+    proc.kill('SIGTERM');
+  } catch (_e) {
+    // Ignore if already terminated
+  }
+
+  // On Windows, cleanly terminate the child process tree for this specific PID
+  if (process.platform === 'win32' && proc.pid) {
+    try {
+      const { execSync } = require('child_process');
+      execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: 'ignore' });
+    } catch (_e) {
+      // Process already exited
+    }
+  }
+}
+
 // Register IPC handlers for ALCO License System
 ipcMain.handle('alco-license-get-status', async () => {
   const userDataDir = app.getPath('userData');
@@ -270,19 +315,31 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('before-quit', () => {
+  stopServerProcess();
+});
+
 app.on('window-all-closed', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
-  }
+  stopServerProcess();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('will-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
-  }
+  stopServerProcess();
+});
+
+process.on('exit', () => {
+  stopServerProcess();
+});
+
+process.on('SIGINT', () => {
+  stopServerProcess();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  stopServerProcess();
+  process.exit(0);
 });

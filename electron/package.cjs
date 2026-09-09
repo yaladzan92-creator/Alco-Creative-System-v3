@@ -18,13 +18,14 @@ fs.copyFileSync(
 
 const packageJson = {
   name: 'alco-creative-system-desktop',
-  version: '1.0.0',
+  version: '1.0.3',
   description: 'ALCO Creative System desktop application',
   author: 'Aladzan Corpora',
   main: 'electron/main.cjs',
   build: {
     appId: 'com.alco.creative.system',
     productName: 'ALCO Creative System',
+    executableName: 'ALCO Creative System',
     electronVersion: '44.1.1',
     directories: { output: '../dist-electron' },
     files: ['dist/**/*', 'electron/**/*', 'firebase-applet-config.json'],
@@ -33,7 +34,9 @@ const packageJson = {
     win: { target: ['nsis'] },
     nsis: {
       oneClick: false,
+      perMachine: false,
       allowToChangeInstallationDirectory: true,
+      deleteAppDataOnUninstall: false,
       artifactName: 'ALCO Creative System Setup ${version}.${ext}',
     },
   },

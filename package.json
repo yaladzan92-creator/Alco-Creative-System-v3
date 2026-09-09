@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "alco-creative-system-desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "ALCO Creative System desktop application",
   "author": "Aladzan Corpora",
   "type": "module",
@@ -61,6 +61,7 @@
   "build": {
     "appId": "com.alco.creative.system",
     "productName": "ALCO Creative System",
+    "executableName": "ALCO Creative System",
     "directories": {
       "output": "dist-electron"
     },
@@ -71,7 +72,9 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
       "artifactName": "ALCO Creative System Setup ${version}.${ext}"
     },
     "files": [
