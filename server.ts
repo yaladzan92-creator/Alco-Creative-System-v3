@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
@@ -966,6 +965,10 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await Function(
+      "specifier",
+      "return import(specifier)"
+    )("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

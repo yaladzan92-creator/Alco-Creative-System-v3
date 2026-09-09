@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const fs = require('fs');
 const path = require('path');
-const { fork } = require('child_process');
+const { spawn } = require('child_process');
 const http = require('http');
 const net = require('net');
 const {
@@ -13,6 +14,23 @@ const {
 
 let mainWindow = null;
 let serverProcess = null;
+let logFilePath = null;
+
+function writeStartupLog(message, error) {
+  const details = error ? ` ${error.stack || error.message || String(error)}` : '';
+  const line = `[${new Date().toISOString()}] ${message}${details}`;
+  console.log(line);
+
+  if (!logFilePath) {
+    return;
+  }
+
+  try {
+    fs.appendFileSync(logFilePath, `${line}\n`, 'utf8');
+  } catch (logError) {
+    console.error('[Electron] Failed to write startup log:', logError);
+  }
+}
 
 // Register IPC handlers for ALCO License System
 ipcMain.handle('alco-license-get-status', async () => {
@@ -41,6 +59,10 @@ ipcMain.handle('alco-license-remove', async () => {
 
 function getFreePort(callback) {
   const server = net.createServer();
+  server.on('error', (err) => {
+    writeStartupLog('[Electron] Failed to allocate a free local port.', err);
+    callback(null);
+  });
   server.listen(0, '127.0.0.1', () => {
     const port = server.address().port;
     server.close(() => {
@@ -52,19 +74,23 @@ function getFreePort(callback) {
 function checkServerReady(port, callback) {
   // Try calling the health endpoint (or any endpoint) to check if Express is listening
   const req = http.get(`http://127.0.0.1:${port}/api/bootstrap`, (res) => {
+    writeStartupLog(`[Electron] Health check returned HTTP ${res.statusCode}.`);
     if (res.statusCode >= 200 && res.statusCode < 500) {
       callback(true);
     } else {
       callback(false);
     }
   });
-  req.on('error', () => callback(false));
+  req.on('error', (err) => {
+    writeStartupLog(`[Electron] Health check failed on port ${port}.`, err);
+    callback(false);
+  });
   req.end();
 }
 
 function pollServer(port, callback) {
   let attempts = 0;
-  const maxAttempts = 100; // 100 attempts * 100ms = 10 seconds
+  const maxAttempts = 200; // 200 attempts * 100ms = 20 seconds
   const interval = setInterval(() => {
     checkServerReady(port, (ready) => {
       attempts++;
@@ -80,6 +106,12 @@ function pollServer(port, callback) {
 }
 
 function createWindow() {
+  logFilePath = path.join(app.getPath('userData'), 'startup.log');
+  writeStartupLog('[Electron] Starting ALCO Creative System.');
+  writeStartupLog(`[Electron] executable=${process.execPath}`);
+  writeStartupLog(`[Electron] appPath=${app.getAppPath()}`);
+  writeStartupLog(`[Electron] resourcesPath=${process.resourcesPath}`);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -96,40 +128,87 @@ function createWindow() {
 
   if (isDev) {
     const port = process.env.PORT || 3000;
-    console.log(`[Electron] Development mode detected. Loading http://127.0.0.1:${port}`);
+    writeStartupLog(`[Electron] Development mode detected. Loading http://127.0.0.1:${port}`);
     mainWindow.loadURL(`http://127.0.0.1:${port}`);
   } else {
-    console.log(`[Electron] Production mode detected. Selecting a dynamic available port...`);
+    writeStartupLog('[Electron] Production mode detected. Selecting a dynamic available port...');
     getFreePort((port) => {
-      console.log(`[Electron] Selected port ${port}. Launching background Express server...`);
+      if (!port) {
+        loadStartupError('Port lokal tidak tersedia untuk menjalankan server aplikasi.');
+        return;
+      }
+
+      writeStartupLog(`[Electron] Selected port ${port}. Launching background Express server...`);
       const unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
       const distDir = path.join(unpackedDir, 'dist');
       const serverPath = path.join(distDir, 'server.cjs');
       const firebaseConfigPath = path.join(unpackedDir, 'firebase-applet-config.json');
 
-      serverProcess = fork(serverPath, [], {
+      writeStartupLog(`[Electron] unpackedDir=${unpackedDir}`);
+      writeStartupLog(`[Electron] distDir=${distDir}`);
+      writeStartupLog(`[Electron] serverPath=${serverPath}`);
+      writeStartupLog(`[Electron] firebaseConfigPath=${firebaseConfigPath}`);
+      writeStartupLog(`[Electron] serverExists=${fs.existsSync(serverPath)}`);
+      writeStartupLog(`[Electron] firebaseConfigExists=${fs.existsSync(firebaseConfigPath)}`);
+
+      if (!fs.existsSync(serverPath)) {
+        writeStartupLog('[Electron] Production server file is missing.');
+        loadStartupError(`File server tidak ditemukan: ${serverPath}`);
+        return;
+      }
+
+      serverProcess = spawn(process.execPath, [serverPath], {
         cwd: distDir,
         env: {
           ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
           NODE_ENV: 'production',
           PORT: String(port),
           ELECTRON_RUN: 'true',
           APP_SERVER_DIR: distDir,
           FIREBASE_CONFIG_PATH: firebaseConfigPath
-        }
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      writeStartupLog(`[Electron] Spawned server process pid=${serverProcess.pid}.`);
+
+      serverProcess.stdout.on('data', (data) => {
+        writeStartupLog(`[Server stdout] ${String(data).trimEnd()}`);
+      });
+
+      serverProcess.stderr.on('data', (data) => {
+        writeStartupLog(`[Server stderr] ${String(data).trimEnd()}`);
       });
 
       serverProcess.on('error', (err) => {
-        console.error('[Electron] Failed to start production express server:', err);
+        writeStartupLog('[Electron] Failed to start production express server:', err);
+      });
+
+      serverProcess.on('exit', (code, signal) => {
+        writeStartupLog(`[Electron] Server process exited with code=${code} signal=${signal}.`);
       });
 
       pollServer(port, (success) => {
         if (success) {
-          console.log(`[Electron] Server is ready on port ${port}. Loading URL...`);
+          writeStartupLog(`[Electron] Server is ready on port ${port}. Loading URL...`);
           mainWindow.loadURL(`http://127.0.0.1:${port}`);
         } else {
-          console.error('[Electron] Local server did not respond in time.');
-          const errorHtml = `
+          writeStartupLog('[Electron] Local server did not respond in time.');
+          loadStartupError('Server lokal tidak merespons dalam batas waktu yang ditentukan.');
+        }
+      });
+    });
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function loadStartupError(reason) {
+  writeStartupLog(`[Electron] Showing startup fallback. reason=${reason}`);
+  const errorHtml = `
             <!DOCTYPE html>
             <html>
             <head>
@@ -180,15 +259,7 @@ function createWindow() {
             </body>
             </html>
           `;
-          mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
-        }
-      });
-    });
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
 }
 
 app.whenReady().then(() => {
