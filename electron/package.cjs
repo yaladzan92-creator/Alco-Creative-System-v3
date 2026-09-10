@@ -15,6 +15,12 @@ fs.copyFileSync(
   path.join(root, 'firebase-applet-config.json'),
   path.join(staging, 'firebase-applet-config.json'),
 );
+if (fs.existsSync(path.join(root, 'alco-creative-system.ico'))) {
+  fs.copyFileSync(
+    path.join(root, 'alco-creative-system.ico'),
+    path.join(staging, 'alco-creative-system.ico'),
+  );
+}
 
 const packageJson = {
   name: 'alco-creative-system-desktop',
@@ -33,15 +39,21 @@ const packageJson = {
       'electron/**/*',
       'package.json',
       'firebase-applet-config.json',
+      'alco-creative-system.ico',
     ],
     asar: true,
     asarUnpack: ['dist/**/*', 'firebase-applet-config.json'],
-    win: { target: ['nsis'] },
+    win: {
+      target: ['nsis'],
+      icon: 'alco-creative-system.ico',
+    },
     nsis: {
       oneClick: false,
       perMachine: false,
       allowToChangeInstallationDirectory: true,
       deleteAppDataOnUninstall: false,
+      installerIcon: 'alco-creative-system.ico',
+      uninstallerIcon: 'alco-creative-system.ico',
       artifactName: 'ALCO.Creative.System.Setup.${version}.${ext}',
     },
   },

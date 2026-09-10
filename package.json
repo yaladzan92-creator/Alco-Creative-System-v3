@@ -68,20 +68,24 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "alco-creative-system.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
+      "installerIcon": "alco-creative-system.ico",
+      "uninstallerIcon": "alco-creative-system.ico",
       "artifactName": "ALCO.Creative.System.Setup.${version}.${ext}"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "firebase-applet-config.json"
+      "firebase-applet-config.json",
+      "alco-creative-system.ico"
     ],
     "asar": true,
     "asarUnpack": [

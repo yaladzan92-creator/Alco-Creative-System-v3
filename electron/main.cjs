@@ -157,11 +157,25 @@ function createWindow() {
   writeStartupLog(`[Electron] appPath=${app.getAppPath()}`);
   writeStartupLog(`[Electron] resourcesPath=${process.resourcesPath}`);
 
+  const iconCandidates = [
+    path.join(__dirname, '../alco-creative-system.ico'),
+    path.join(app.getAppPath(), 'alco-creative-system.ico'),
+    path.join(process.resourcesPath || '', 'alco-creative-system.ico'),
+  ];
+  let windowIcon;
+  for (const candidate of iconCandidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      windowIcon = candidate;
+      break;
+    }
+  }
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: "ALCO Creative System",
     autoHideMenuBar: true,
+    ...(windowIcon ? { icon: windowIcon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
