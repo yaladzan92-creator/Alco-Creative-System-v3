@@ -28,7 +28,12 @@ const packageJson = {
     executableName: 'ALCO Creative System',
     electronVersion: '44.1.1',
     directories: { output: '../dist-electron' },
-    files: ['dist/**/*', 'electron/**/*', 'firebase-applet-config.json'],
+    files: [
+      'dist/**/*',
+      'electron/**/*',
+      'package.json',
+      'firebase-applet-config.json',
+    ],
     asar: true,
     asarUnpack: ['dist/**/*', 'firebase-applet-config.json'],
     win: { target: ['nsis'] },
@@ -37,7 +42,7 @@ const packageJson = {
       perMachine: false,
       allowToChangeInstallationDirectory: true,
       deleteAppDataOnUninstall: false,
-      artifactName: 'ALCO Creative System Setup ${version}.${ext}',
+      artifactName: 'ALCO.Creative.System.Setup.${version}.${ext}',
     },
   },
 };

@@ -75,7 +75,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "ALCO Creative System Setup ${version}.${ext}"
+      "artifactName": "ALCO.Creative.System.Setup.${version}.${ext}"
     },
     "files": [
       "dist/**/*",

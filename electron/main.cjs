@@ -70,7 +70,7 @@ function stopServerProcess() {
   if (process.platform === 'win32' && proc.pid) {
     try {
       const { execSync } = require('child_process');
-      execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: 'ignore' });
+      execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
     } catch (_e) {
       // Process already exited
     }
