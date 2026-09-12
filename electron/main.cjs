@@ -123,10 +123,10 @@ function getFreePort(callback) {
 }
 
 function checkServerReady(port, callback) {
-  // Try calling the health endpoint (or any endpoint) to check if Express is listening
-  const req = http.get(`http://127.0.0.1:${port}/api/bootstrap`, (res) => {
-    writeStartupLog(`[Electron] Health check returned HTTP ${res.statusCode}.`);
-    if (res.statusCode >= 200 && res.statusCode < 500) {
+  // ALCO Standard v2.2: Health check internal service (target HTTP 200)
+  const req = http.get(`http://127.0.0.1:${port}/api/ping`, (res) => {
+    writeStartupLog(`[Electron] Health check (/api/ping) returned HTTP ${res.statusCode}.`);
+    if (res.statusCode === 200) {
       callback(true);
     } else {
       callback(false);
@@ -204,10 +204,21 @@ function createWindow() {
       }
 
       writeStartupLog(`[Electron] Selected port ${port}. Launching background Express server...`);
-      const unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
-      const distDir = path.join(unpackedDir, 'dist');
-      const serverPath = path.join(distDir, 'server.cjs');
-      const firebaseConfigPath = path.join(unpackedDir, 'firebase-applet-config.json');
+      let unpackedDir = path.join(process.resourcesPath, 'app.asar.unpacked');
+      let distDir = path.join(unpackedDir, 'dist');
+      let serverPath = path.join(distDir, 'server.cjs');
+      let firebaseConfigPath = path.join(unpackedDir, 'firebase-applet-config.json');
+
+      if (!fs.existsSync(serverPath)) {
+        // Fallback for unpacked development staging or non-asar layouts
+        const appPathDist = path.join(app.getAppPath(), 'dist');
+        if (fs.existsSync(path.join(appPathDist, 'server.cjs'))) {
+          unpackedDir = app.getAppPath();
+          distDir = appPathDist;
+          serverPath = path.join(distDir, 'server.cjs');
+          firebaseConfigPath = path.join(unpackedDir, 'firebase-applet-config.json');
+        }
+      }
 
       writeStartupLog(`[Electron] unpackedDir=${unpackedDir}`);
       writeStartupLog(`[Electron] distDir=${distDir}`);

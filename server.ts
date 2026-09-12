@@ -384,6 +384,16 @@ async function startServer() {
     }
   };
 
+  // GET /api/ping (Lightweight public heartbeat endpoint for ALCO standard compliance)
+  app.get("/api/ping", (req: any, res: any) => {
+    res.status(200).json({
+      status: "ok",
+      app: "alco-creative-system",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+
   // GET /api/bootstrap (Public endpoint for discovering available integrations and statuses)
   app.get("/api/bootstrap", async (req: any, res: any) => {
     res.json({
