@@ -186,8 +186,7 @@ export default function Dashboard() {
   const [selectedProjectIds, setSelectedProjectIds] = React.useState<string[]>([]);
   const [bulkDeleteStep, setBulkDeleteStep] = React.useState<0 | 1 | 2>(0);
   const [bulkDeleting, setBulkDeleting] = React.useState(false);
-  const [contentWizardOpen, setContentWizardOpen] = React.useState(false);
-  const [contentWizardProjectId, setContentWizardProjectId] = React.useState<string>("");
+  const [contentEngineModalProject, setContentEngineModalProject] = React.useState<any | null>(null);
 
   // Context Menu State (3 Dots Menu)
   const [activeMenuProjectId, setActiveMenuProjectId] = React.useState<string | null>(null);
@@ -318,6 +317,9 @@ export default function Dashboard() {
     }
   };
 
+  // -------------------------------------------------------------
+  // Data Handoff Foundations (Preserved for future Electron-to-Electron IPC integration)
+  // -------------------------------------------------------------
   const buildContentEnginePayload = (project: any) => {
     const bi = project.brandIntelligence || {};
     const brandIdentity = bi.brandIdentity || {};
@@ -395,15 +397,11 @@ export default function Dashboard() {
     }
   };
 
-  const openContentEngineWizard = (project?: any, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const openContentEngineModal = (project: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setActiveMenuProjectId(null);
-    const firstReadyProject = projects.find((item) => !!item.brandFoundationData || item.currentStep >= 10);
-    setContentWizardProjectId(project?.id || firstReadyProject?.id || projects[0]?.id || "");
-    setContentWizardOpen(true);
+    setContentEngineModalProject(project);
   };
-
-  const selectedContentWizardProject = projects.find((project) => project.id === contentWizardProjectId);
 
   const handleExportSelectedProjects = () => {
     if (selectedProjectIds.length === 0) {
@@ -1002,15 +1000,6 @@ export default function Dashboard() {
                                   <span>Backup Proyek (.json)</span>
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={(e) => openContentEngineWizard(project, e)}
-                                  className="w-full px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                                >
-                                  <ArrowUpRight className="w-3.5 h-3.5 text-sky-500" />
-                                  <span>Buka di Content Engine</span>
-                                </button>
-
                                 <div className="h-px bg-border/60 my-1" />
 
                                 <button
@@ -1145,37 +1134,19 @@ export default function Dashboard() {
                           )}
                         </div>
 
-                        {/* 3. Panel Lanjutan Content Engine (Hanya jika Strategi & Brand Selesai) */}
+                        {/* 3. Secondary Action: Lanjutkan ke Content Engine (Hanya jika Strategi & Brand Selesai) */}
                         {progressInfo.isStrategyDone && progressInfo.isBrandDone && (
-                          <div className="bg-sky-500/10 border border-sky-500/25 dark:bg-sky-950/30 dark:border-sky-500/30 rounded-xl p-3 space-y-2 text-left mt-2.5">
-                            <div>
-                              <h4 className="text-xs font-heading font-black text-foreground break-words [overflow-wrap:anywhere]">
-                                Lanjutkan ke Produksi Konten
-                              </h4>
-                              <p className="text-[11px] text-muted-foreground leading-snug mt-0.5 break-words [overflow-wrap:anywhere]">
-                                Unduh file strategi ini untuk diunggah ke ALCO Content Engine.
-                              </p>
-                            </div>
-                            <div className="flex flex-col gap-2 w-full pt-1">
-                              <Button
-                                size="sm"
-                                onClick={(e) => handleDownloadContentEngineBlueprint(project, e)}
-                                className="w-full h-9 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all text-center min-w-0 break-words"
-                              >
-                                <FileDown className="w-4 h-4 shrink-0" />
-                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">Unduh Blueprint untuk Content Engine (.JSON)</span>
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => openContentEngineWizard(project, e)}
-                                className="w-full h-8 bg-transparent hover:bg-sky-500/10 border border-sky-500/40 text-sky-700 dark:text-sky-300 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-center min-w-0 break-words"
-                              >
-                                <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">Kirim Otomatis ke Content Engine</span>
-                              </Button>
-                            </div>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openContentEngineModal(project, e);
+                            }}
+                            className="w-full py-1.5 px-3 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-border/50"
+                          >
+                            <ArrowUpRight className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span>Lanjutkan ke Content Engine</span>
+                          </button>
                         )}
                       </div>
                     </CardContent>
@@ -1213,102 +1184,68 @@ export default function Dashboard() {
         <p className="text-[9px] text-muted-foreground/50 mt-0.5">{config.companyName} &copy; {new Date().getFullYear()}</p>
       </footer>
 
-      {/* Content Engine Wizard Dialog */}
-      {contentWizardOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      {/* Content Engine Modal (Contextual Project Handoff via Blueprint) */}
+      {contentEngineModalProject && (
+        <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 15, scale: 0.98 }}
-            className="w-full max-w-3xl bg-card border border-border rounded-3xl shadow-2xl overflow-hidden text-left"
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            className="w-full max-w-md bg-card border border-border rounded-3xl shadow-2xl p-6 space-y-4 text-left relative"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-600">
-                  <Zap className="w-3.5 h-3.5" />
-                  Kirim ke Content Engine
-                </span>
-                <h2 className="mt-2 text-xl font-heading font-black text-foreground">
-                  Pilih proyek untuk dikirim ke Content Engine
-                </h2>
-                <p className="text-xs text-muted-foreground font-medium">
-                  Data strategi proyek terpilih akan otomatis dikirim tanpa perlu upload JSON manual.
-                </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                  <Zap className="w-5 h-5 fill-primary/15" />
+                </div>
+                <div>
+                  <h3 className="text-base font-heading font-black text-foreground">
+                    ALCO Content Engine
+                  </h3>
+                  <p className="text-xs text-muted-foreground font-medium truncate max-w-[220px]">
+                    {contentEngineModalProject.name}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setContentWizardOpen(false)}
+                onClick={() => setContentEngineModalProject(null)}
                 className="w-8 h-8 rounded-xl bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[400px] overflow-y-auto">
-              {projects.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
-                  Belum ada proyek yang tersedia.
-                </div>
-              ) : (
-                projects.map((proj) => {
-                  const selected = proj.id === contentWizardProjectId;
-                  return (
-                    <button
-                      key={proj.id}
-                      type="button"
-                      onClick={() => setContentWizardProjectId(proj.id)}
-                      className={cn(
-                        "w-full p-4 rounded-2xl border text-left transition-all cursor-pointer",
-                        selected
-                          ? "border-sky-500/50 bg-sky-500/10 shadow-sm"
-                          : "border-border bg-secondary/20 hover:bg-secondary/40"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <h4 className="text-sm font-bold text-foreground w-full max-w-full line-clamp-2 break-words [overflow-wrap:anywhere] leading-snug">
-                            {proj.name}
-                          </h4>
-                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                            {proj.nicheData?.selectedOption?.name || "Strategi Produk"}
-                          </p>
-                        </div>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0",
-                          proj.brandFoundationData || proj.currentStep >= 10
-                            ? "bg-emerald-500/10 text-emerald-600"
-                            : "bg-amber-500/10 text-amber-600"
-                        )}>
-                          {proj.brandFoundationData || proj.currentStep >= 10 ? "Siap" : "Draf"}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+            <p className="text-xs text-foreground font-medium leading-relaxed">
+              Strategi project ini sudah siap digunakan untuk produksi konten.
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              <Button
+                onClick={(e) => {
+                  handleDownloadContentEngineBlueprint(contentEngineModalProject, e);
+                  setContentEngineModalProject(null);
+                }}
+                className="w-full h-10 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-primary/20"
+              >
+                <FileDown className="w-4 h-4 shrink-0" />
+                <span>Unduh Blueprint Content Engine (.JSON)</span>
+              </Button>
+
+              <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-1">
+                Impor file Blueprint ini melalui ALCO Content Engine. Aplikasi Content Engine dikelola melalui ALCO Hub.
+              </p>
             </div>
 
-            <div className="p-5 bg-secondary/20 border-t border-border flex items-center justify-end gap-2.5">
+            <div className="flex items-center justify-end pt-2 border-t border-border">
               <Button
                 variant="outline"
-                onClick={() => setContentWizardOpen(false)}
-                className="h-10 px-4 rounded-xl font-bold text-xs cursor-pointer"
+                size="sm"
+                onClick={() => setContentEngineModalProject(null)}
+                className="rounded-xl text-xs font-bold cursor-pointer"
               >
-                Batal
-              </Button>
-              <Button
-                disabled={!selectedContentWizardProject}
-                onClick={() => {
-                  if (selectedContentWizardProject) {
-                    openContentEngine(selectedContentWizardProject);
-                    setContentWizardOpen(false);
-                  }
-                }}
-                className="h-10 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Buka Content Engine</span>
-                <ArrowUpRight className="w-4 h-4" />
+                Tutup
               </Button>
             </div>
           </motion.div>

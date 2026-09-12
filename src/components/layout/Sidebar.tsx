@@ -232,20 +232,16 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
                     "w-full flex items-center transition-all duration-150 rounded-xl cursor-pointer text-left group relative",
                     isOpen ? "gap-2.5 px-2.5 py-1.5" : "justify-center p-2 my-0.5",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-bold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                   )}
                 >
                   {/* Step Icon / Number Indicator */}
                   <div className={cn(
-                    "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 relative transition-transform group-hover:scale-105",
+                    "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 relative transition-transform group-hover:scale-105",
                     isActive
                       ? "bg-white/20 text-white"
-                      : isCompleted
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                      : isDraft
-                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                      : "bg-secondary text-muted-foreground/70"
+                      : "bg-secondary text-muted-foreground group-hover:text-foreground"
                   )}>
                     {isOpen ? (
                       <span>{step.id}</span>
@@ -270,21 +266,32 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
                   {isOpen && (
                     <div className="flex-1 min-w-0 flex items-center justify-between gap-1.5">
                       <span className={cn(
-                        "text-xs truncate tracking-tight font-medium",
-                        isActive ? "text-white font-bold" : "text-foreground group-hover:text-foreground"
+                        "text-xs truncate tracking-tight",
+                        isActive ? "text-white font-bold" : "text-foreground/90 font-medium group-hover:text-foreground"
                       )}>
                         {step.shortTitle}
                       </span>
 
                       {/* Lightweight status indicator */}
-                      <span className={cn(
-                        "text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 border",
-                        isActive
-                          ? "bg-white/20 text-white border-white/20"
-                          : status.color
-                      )}>
-                        {status.label}
-                      </span>
+                      {isActive ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 bg-white/20 text-white">
+                          {status.label}
+                        </span>
+                      ) : isCompleted ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <span>Selesai</span>
+                        </span>
+                      ) : isDraft ? (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                          <span>Draf</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 text-muted-foreground/70 bg-secondary/80 border border-border/40">
+                          Belum Diisi
+                        </span>
+                      )}
                     </div>
                   )}
                 </button>
@@ -311,17 +318,19 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
               aria-label="Content Engine"
               className={cn(
                 "w-full flex items-center transition-all duration-150 rounded-xl cursor-pointer text-left group relative",
-                isOpen ? "gap-2.5 px-2.5 py-2 bg-primary/5 hover:bg-primary/10 border border-primary/20 text-primary" : "justify-center p-2 text-primary hover:bg-primary/10"
+                isOpen 
+                  ? "gap-2.5 px-2.5 py-2 bg-secondary/60 hover:bg-secondary text-foreground border border-border/60" 
+                  : "justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >
               <Zap className="w-4 h-4 text-primary fill-primary/15 shrink-0 group-hover:scale-110 transition-transform" />
               
               {isOpen && (
                 <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
-                  <span className="text-xs font-black tracking-tight text-foreground truncate">
+                  <span className="text-xs font-bold tracking-tight text-foreground truncate">
                     Content Engine
                   </span>
-                  <span className="text-[8px] font-black text-primary bg-primary/15 px-1.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider shrink-0">
+                  <span className="text-[8px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider shrink-0">
                     Desktop App
                   </span>
                 </div>
