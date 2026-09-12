@@ -1,15 +1,22 @@
-import { Link, useLocation } from "react-router-dom";
-import { cn } from "../../lib/utils";
 import React from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { 
   LayoutDashboard, 
-  Zap,
+  Zap, 
+  PanelLeftClose, 
+  PanelLeftOpen, 
   Sparkles,
-  PanelLeftClose,
-  PanelLeftOpen
+  Info,
+  CheckCircle2,
+  Clock,
+  ExternalLink
 } from "lucide-react";
 import { useBranding } from "@/contexts/BrandingContext";
+import { useProject } from "@/contexts/ProjectContext";
+import { WORKFLOW_STEPS, getStepStatus } from "@/lib/workflowSteps";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
   className?: string;
@@ -19,8 +26,19 @@ interface SidebarProps {
 
 export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { config } = useBranding();
-  const [isDevActive, setIsDevActive] = React.useState(localStorage.getItem("alco_developer_mode_active") === "true");
+  const { activeProjectId, activeProject } = useProject();
+
+  const [isDevActive, setIsDevActive] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("alco_developer_mode_active") === "true";
+    }
+    return false;
+  });
+
+  const [showContentEngineModal, setShowContentEngineModal] = React.useState(false);
 
   React.useEffect(() => {
     const updateStates = () => {
@@ -36,16 +54,50 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
     };
   }, []);
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Pusat Dasbor", path: "/dashboard" },
-  ];
+  // Determine active step from route
+  const isWorkflowRoute = location.pathname.startsWith("/wizard");
+  let activeStepNumber = 0;
+  if (isWorkflowRoute) {
+    const stepParam = searchParams.get("step");
+    const modeParam = searchParams.get("mode");
+    if (stepParam) {
+      const parsed = parseInt(stepParam, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 10) {
+        activeStepNumber = parsed;
+      }
+    } else if (modeParam === "ads") {
+      activeStepNumber = 10;
+    } else if (modeParam === "brand") {
+      activeStepNumber = 9;
+    } else {
+      activeStepNumber = 1;
+    }
+  }
 
-  const handleExitDevMode = () => {
-    localStorage.removeItem("alco_developer_mode_active");
-    setIsDevActive(false);
-    window.dispatchEvent(new Event("alco_developer_auth_changed"));
-    toast.success("Mode Lanjutan Dinonaktifkan");
-    window.location.href = "/dashboard";
+  const handleStepClick = (stepId: number) => {
+    if (activeProjectId && activeProjectId !== "undefined" && activeProjectId !== "null") {
+      navigate(`/wizard/${activeProjectId}?step=${stepId}`);
+      if (typeof window !== "undefined" && window.innerWidth < 1024 && isOpen) {
+        onToggle();
+      }
+    } else {
+      toast.info("Silakan pilih atau buat proyek terlebih dahulu untuk memulai workflow.", {
+        description: "Buka salah satu proyek di Dashboard atau buat proyek baru."
+      });
+      if (location.pathname !== "/dashboard") {
+        navigate("/dashboard");
+      }
+      if (typeof window !== "undefined" && window.innerWidth < 1024 && isOpen) {
+        onToggle();
+      }
+    }
+  };
+
+  const handleContentEngineClick = () => {
+    setShowContentEngineModal(true);
+    if (typeof window !== "undefined" && window.innerWidth < 1024 && isOpen) {
+      onToggle();
+    }
   };
 
   return (
@@ -66,13 +118,13 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
           "fixed inset-y-0 left-0 md:static",
           isOpen 
             ? "translate-x-0 w-64 p-4 shadow-2xl md:shadow-none" 
-            : "-translate-x-full md:translate-x-0 md:w-16 md:p-3 overflow-hidden",
+            : "-translate-x-full md:translate-x-0 md:w-16 md:p-2 overflow-hidden",
           className
         )}
       >
         {/* Header & Toggle */}
         <div className={cn(
-          "flex items-center gap-2 mb-8 overflow-hidden",
+          "flex items-center gap-2 mb-4 overflow-hidden shrink-0",
           isOpen ? "justify-between px-1" : "justify-center"
         )}>
           <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
@@ -87,12 +139,16 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
             {isOpen && (
               <div className="flex flex-col overflow-hidden min-w-0">
                 <div className="flex items-center gap-1.5 overflow-hidden">
-                  <span className="font-heading font-bold tracking-tight text-sm leading-none truncate">{config.appName}</span>
+                  <span className="font-heading font-black tracking-tight text-xs text-foreground leading-none truncate">
+                    {config.appName}
+                  </span>
                   {isDevActive && (
                     <span className="bg-emerald-500 text-[8px] font-black text-white px-1.5 py-0.5 rounded uppercase tracking-wider scale-90 shrink-0">DEV</span>
                   )}
                 </div>
-                <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-[0.18em] truncate">{config.companyName}</span>
+                <span className="text-[9px] text-muted-foreground font-semibold uppercase tracking-[0.16em] truncate mt-0.5">
+                  {config.companyName}
+                </span>
               </div>
             )}
           </div>
@@ -109,87 +165,185 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <div className="flex-1 space-y-1">
-          {isOpen && (
-            <p className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2.5">
-              Ekosistem
-            </p>
-          )}
+        {/* Scrollable Navigation Area */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-0.5 scrollbar-thin">
+          {/* Main Dashboard Navigation */}
+          <div>
+            <Link
+              to="/dashboard"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.innerWidth < 1024 && isOpen) {
+                  onToggle();
+                }
+              }}
+              id="sidebar-link-dashboard"
+              title={!isOpen ? "Dashboard Utama" : undefined}
+              aria-label="Dashboard Utama"
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group relative",
+                !isOpen && "justify-center px-0",
+                location.pathname === "/dashboard"
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 font-bold" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              )}
+            >
+              <LayoutDashboard className={cn(
+                "w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
+                location.pathname === "/dashboard" ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
+              )} />
+              {isOpen && (
+                <span className="text-xs font-bold tracking-tight truncate">Dashboard Utama</span>
+              )}
+            </Link>
+          </div>
 
-          {menuItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => {
-                  if (typeof window !== "undefined" && window.innerWidth < 1024 && isOpen) {
-                    onToggle();
-                  }
-                }}
-                id={`sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                title={!isOpen ? item.label : undefined}
-                aria-label={item.label}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
-                  !isOpen && "justify-center px-0",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+          {/* WORKFLOW SECTION: Step 1 to 10 */}
+          <div className="space-y-1">
+            {isOpen ? (
+              <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground/80">
+                  WORKFLOW
+                </span>
+                {activeProject?.name && (
+                  <span className="text-[9px] font-medium text-primary/80 truncate max-w-[110px]" title={activeProject.name}>
+                    {activeProject.name}
+                  </span>
                 )}
-              >
-                <item.icon className={cn(
-                  "w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
-                  isActive ? "text-primary-foreground" : "text-muted-foreground/70 group-hover:text-primary"
-                )} />
-                {isOpen && (
-                  <span className="text-xs font-bold tracking-tight truncate">{item.label}</span>
-                )}
-              </Link>
-            );
-          })}
-
-          {/* External Content Engine Link */}
-          {isOpen && (
-            <p className="px-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-5 mb-2.5">
-              Mesin Konten
-            </p>
-          )}
-
-          <button
-            onClick={() => window.open("https://ai.studio/apps/b61328f3-5e01-4ba3-bc60-9c93a9475ba4", "_blank", "noopener,noreferrer")}
-            title={!isOpen ? "ALCO Content Engine" : undefined}
-            aria-label="Buka ALCO Content Engine"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all duration-200 group cursor-pointer shadow-sm w-full text-left",
-              !isOpen && "justify-center px-0 mt-3"
+              </div>
+            ) : (
+              <div className="h-px bg-border/60 my-2 mx-1" />
             )}
-          >
-            <Zap className="w-4 h-4 text-primary fill-primary/15 shrink-0 group-hover:scale-110 transition-transform" />
-            {isOpen && (
-              <>
-                <span className="text-xs font-extrabold font-heading flex-1 truncate">Content Engine</span>
-                <Sparkles className="w-3.5 h-3.5 text-primary/80 shrink-0 animate-pulse" />
-              </>
+
+            {WORKFLOW_STEPS.map((step) => {
+              const Icon = step.icon;
+              const isActive = isWorkflowRoute && activeStepNumber === step.id;
+              const status = getStepStatus(step.id, activeProject);
+              const isCompleted = status.label === "Selesai";
+              const isDraft = status.label === "Draf";
+
+              return (
+                <button
+                  key={step.id}
+                  onClick={() => handleStepClick(step.id)}
+                  id={`sidebar-step-${step.id}`}
+                  title={!isOpen ? `${step.title} (${status.label})` : undefined}
+                  aria-label={`${step.title} - ${status.label}`}
+                  className={cn(
+                    "w-full flex items-center transition-all duration-150 rounded-xl cursor-pointer text-left group relative",
+                    isOpen ? "gap-2.5 px-2.5 py-1.5" : "justify-center p-2 my-0.5",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                  )}
+                >
+                  {/* Step Icon / Number Indicator */}
+                  <div className={cn(
+                    "w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 relative transition-transform group-hover:scale-105",
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : isCompleted
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : isDraft
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "bg-secondary text-muted-foreground/70"
+                  )}>
+                    {isOpen ? (
+                      <span>{step.id}</span>
+                    ) : (
+                      <Icon className="w-3.5 h-3.5" />
+                    )}
+
+                    {/* Mini indicator dot in collapsed mode */}
+                    {!isOpen && (
+                      <span className={cn(
+                        "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-sidebar",
+                        isCompleted
+                          ? "bg-emerald-500"
+                          : isDraft
+                          ? "bg-amber-500"
+                          : "bg-transparent"
+                      )} />
+                    )}
+                  </div>
+
+                  {/* Expanded Step Title and Status */}
+                  {isOpen && (
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-1.5">
+                      <span className={cn(
+                        "text-xs truncate tracking-tight font-medium",
+                        isActive ? "text-white font-bold" : "text-foreground group-hover:text-foreground"
+                      )}>
+                        {step.shortTitle}
+                      </span>
+
+                      {/* Lightweight status indicator */}
+                      <span className={cn(
+                        "text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 border",
+                        isActive
+                          ? "bg-white/20 text-white border-white/20"
+                          : status.color
+                      )}>
+                        {status.label}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ALCO ECOSYSTEM SECTION */}
+          <div className="space-y-1 pt-1">
+            {isOpen ? (
+              <div className="px-2 pt-1 pb-1.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground/80">
+                  ALCO ECOSYSTEM
+                </span>
+              </div>
+            ) : (
+              <div className="h-px bg-border/60 my-2 mx-1" />
             )}
-          </button>
+
+            <button
+              onClick={handleContentEngineClick}
+              id="sidebar-content-engine"
+              title={!isOpen ? "Content Engine (Aplikasi Desktop)" : undefined}
+              aria-label="Content Engine"
+              className={cn(
+                "w-full flex items-center transition-all duration-150 rounded-xl cursor-pointer text-left group relative",
+                isOpen ? "gap-2.5 px-2.5 py-2 bg-primary/5 hover:bg-primary/10 border border-primary/20 text-primary" : "justify-center p-2 text-primary hover:bg-primary/10"
+              )}
+            >
+              <Zap className="w-4 h-4 text-primary fill-primary/15 shrink-0 group-hover:scale-110 transition-transform" />
+              
+              {isOpen && (
+                <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
+                  <span className="text-xs font-black tracking-tight text-foreground truncate">
+                    Content Engine
+                  </span>
+                  <span className="text-[8px] font-black text-primary bg-primary/15 px-1.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider shrink-0">
+                    Desktop App
+                  </span>
+                </div>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Footer Area */}
-        <div className="pt-3 border-t border-sidebar-border/50 space-y-2 mt-auto">
+        {/* Footer Area: Dev Tools / App Settings */}
+        <div className="pt-2 border-t border-sidebar-border/50 shrink-0 mt-auto">
           {isDevActive && (
             isOpen ? (
-              <div className="flex flex-col gap-1.5 px-2 text-[10px] font-bold text-muted-foreground pt-2 border-t border-sidebar-border/30">
-                <Link to="/rebrand" className="hover:text-primary transition-colors py-1 uppercase tracking-wider">
+              <div className="flex flex-col gap-1 px-1 text-[10px] font-bold text-muted-foreground">
+                <Link to="/rebrand" className="hover:text-primary transition-colors py-1 uppercase tracking-wider truncate">
                   Pengaturan Aplikasi
                 </Link>
-                <Link to="/developer" className="hover:text-primary transition-colors py-1 uppercase tracking-wider">
+                <Link to="/developer" className="hover:text-primary transition-colors py-1 uppercase tracking-wider truncate">
                   Alat Lanjutan
                 </Link>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2 py-2">
+              <div className="flex flex-col items-center gap-2 py-1">
                 <Link to="/rebrand" title="Pengaturan Aplikasi" aria-label="Pengaturan Aplikasi" className="p-1.5 text-muted-foreground hover:text-primary transition-colors text-xs">
                   🎨
                 </Link>
@@ -201,6 +355,61 @@ export default function Sidebar({ className, isOpen, onToggle }: SidebarProps) {
           )}
         </div>
       </aside>
+
+      {/* Content Engine Informational Modal */}
+      {showContentEngineModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-card border border-border w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4 text-left relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                <Zap className="w-5 h-5 fill-primary/15" />
+              </div>
+              <div>
+                <h3 className="text-base font-heading font-black text-foreground">
+                  ALCO Content Engine
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Aplikasi Desktop Terpisah (ALCO Ecosystem)
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-secondary/40 border border-border/60 rounded-2xl p-4 text-xs space-y-2 text-muted-foreground leading-relaxed">
+              <p>
+                <strong>ALCO Content Engine</strong> beroperasi sebagai aplikasi desktop terpisah di dalam ekosistem ALCO.
+              </p>
+              <p>
+                Untuk mentransfer strategi dan konten dari ALCO Creative System, silakan unduh <strong>Blueprint Content Engine</strong> melalui Dashboard Proyek, lalu buka dan impor file tersebut di aplikasi Content Engine Anda.
+              </p>
+              <div className="pt-1 flex items-center gap-1.5 text-[11px] text-primary font-bold">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span>Kelola dan jalankan melalui ALCO Hub</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowContentEngineModal(false)}
+                className="rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Tutup
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setShowContentEngineModal(false);
+                  navigate("/dashboard");
+                }}
+                className="rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+              >
+                Buka Dashboard
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

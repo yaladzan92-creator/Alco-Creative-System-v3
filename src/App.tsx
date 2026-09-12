@@ -12,6 +12,7 @@ import DeveloperPanel from "@/pages/DeveloperPanel";
 import RebrandingPanel from "@/pages/RebrandingPanel";
 import { Toaster } from "@/components/ui/sonner";
 import { BrandingProvider, useBranding } from "@/contexts/BrandingContext";
+import { ProjectProvider } from "@/contexts/ProjectContext";
 import WorkflowWizard from "@/pages/WorkflowWizard";
 import ApiAccess from "@/pages/ApiAccess";
 import { Zap, Menu, ShieldCheck, ShieldAlert, Monitor } from "lucide-react";
@@ -42,12 +43,11 @@ function MainAppLayout({
   const isWorkflowRoute = location.pathname.startsWith("/wizard");
   const [showLicenseModal, setShowLicenseModal] = React.useState(false);
 
-  // Auto-collapse sidebar when entering workflow/UGC area (/wizard/...)
-  // or auto-close sidebar on mobile/tablet when route changes
+  // Auto-close sidebar on mobile/tablet when route changes
   React.useEffect(() => {
     const isMobileOrTablet = typeof window !== "undefined" && window.innerWidth < 1024;
 
-    if (isWorkflowRoute || isMobileOrTablet) {
+    if (isMobileOrTablet) {
       setSidebarOpen(false);
       if (typeof window !== "undefined") {
         localStorage.setItem("alco_sidebar_open", "false");
@@ -61,96 +61,84 @@ function MainAppLayout({
       
       <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         {/* Main Top Header Bar with Hamburger Menu Button */}
-        {!isWorkflowRoute && (
-          <header className="h-12 border-b border-border/60 bg-card/40 backdrop-blur-md px-3 md:px-4 flex items-center justify-between shrink-0 z-30">
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={toggleSidebar}
-                id="btn-toggle-sidebar"
-                title={sidebarOpen ? "Tutup / Sembunyikan Sidebar" : "Buka / Perluas Sidebar"}
-                aria-label={sidebarOpen ? "Tutup sidebar" : "Buka sidebar"}
-                className="p-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground hover:text-primary border border-border/70 transition-all cursor-pointer flex items-center justify-center shrink-0 group shadow-sm active:scale-95"
-              >
-                <Menu className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-              </button>
+        <header className="h-12 border-b border-border/60 bg-card/40 backdrop-blur-md px-3 md:px-4 flex items-center justify-between shrink-0 z-30">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={toggleSidebar}
+              id="btn-toggle-sidebar"
+              title={sidebarOpen ? "Tutup / Sembunyikan Sidebar" : "Buka / Perluas Sidebar"}
+              aria-label={sidebarOpen ? "Tutup sidebar" : "Buka sidebar"}
+              className="p-2 rounded-xl bg-secondary/80 hover:bg-secondary text-foreground hover:text-primary border border-border/70 transition-all cursor-pointer flex items-center justify-center shrink-0 group shadow-sm active:scale-95"
+            >
+              <Menu className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            </button>
 
-              <div className="flex items-center gap-2 overflow-hidden">
-                <span className="font-heading font-black text-xs md:text-sm text-foreground tracking-tight truncate">
-                  {config.appName}
-                </span>
-                <span className="text-[10px] text-muted-foreground/70 font-medium hidden sm:inline-block border-l border-border/60 pl-2">
-                  {config.companyName}
-                </span>
-              </div>
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className="font-heading font-black text-xs md:text-sm text-foreground tracking-tight truncate">
+                {config.appName}
+              </span>
+              <span className="text-[10px] text-muted-foreground/70 font-medium hidden sm:inline-block border-l border-border/60 pl-2">
+                {config.companyName}
+              </span>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              {/* ALCO License Status Badge */}
-              {licenseState ? (
-                licenseState.status === "LICENSE_VALID" ? (
-                  <button
-                    onClick={() => setShowLicenseModal(true)}
-                    title="Lisensi ALCO Terverifikasi Resmi (Klik untuk detail)"
-                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">ALCO License: {licenseState.payload?.plan?.toUpperCase()}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowLicenseModal(true)}
-                    title="Lisensi Tidak Valid / Belum Teraktivasi"
-                    className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-xl border border-rose-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer animate-pulse"
-                  >
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Lisensi: {licenseState.status}</span>
-                  </button>
-                )
-              ) : (
-                <span
-                  title="Aplikasi berjalan dalam mode Web Browser Preview. Penegakan Lisensi berlaku di Electron Desktop Build."
-                  className="text-[10px] font-semibold text-slate-500 bg-slate-500/10 px-2.5 py-1 rounded-xl border border-slate-500/20 flex items-center gap-1.5"
-                >
-                  <Monitor className="w-3 h-3" />
-                  <span className="hidden md:inline">Browser Preview Mode</span>
-                </span>
-              )}
-
-              {/* Subtle contextual AI status indicator */}
-              {hasApiKey ? (
+          <div className="flex items-center gap-2">
+            {/* ALCO License Status Badge */}
+            {licenseState ? (
+              licenseState.status === "LICENSE_VALID" ? (
                 <button
-                  onClick={() => { void promptApiKey(false).catch(() => undefined); }}
-                  title="Gemini AI Aktif (Klik untuk ubah API Key)"
-                  aria-label="Gemini AI aktif. Klik untuk ubah API Key"
-                  className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  onClick={() => setShowLicenseModal(true)}
+                  title="Lisensi ALCO Terverifikasi Resmi (Klik untuk detail)"
+                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="hidden sm:inline">AI Aktif</span>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">ALCO License: {licenseState.payload?.plan?.toUpperCase()}</span>
                 </button>
               ) : (
                 <button
-                  onClick={() => { void promptApiKey(false).catch(() => undefined); }}
-                  title="Klik untuk mengaktifkan Gemini AI"
-                  aria-label="Aktifkan Gemini AI"
-                  className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  onClick={() => setShowLicenseModal(true)}
+                  title="Lisensi Tidak Valid / Belum Teraktivasi"
+                  className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-xl border border-rose-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer animate-pulse"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  <span className="hidden sm:inline">AI Belum Diaktifkan</span>
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Lisensi: {licenseState.status}</span>
                 </button>
-              )}
-
-              <button
-                onClick={() => window.open("https://ai.studio/apps/b61328f3-5e01-4ba3-bc60-9c93a9475ba4", "_blank", "noopener,noreferrer")}
-                title="Buka Alco Content Engine"
-                aria-label="Buka Alco Content Engine"
-                className="text-[11px] font-extrabold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1 rounded-xl border border-primary/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              )
+            ) : (
+              <span
+                title="Aplikasi berjalan dalam mode Web Browser Preview. Penegakan Lisensi berlaku di Electron Desktop Build."
+                className="text-[10px] font-semibold text-slate-500 bg-slate-500/10 px-2.5 py-1 rounded-xl border border-slate-500/20 flex items-center gap-1.5"
               >
-                <Zap className="w-3.5 h-3.5 fill-primary/15 animate-pulse text-primary" />
-                <span className="hidden sm:inline">Content Engine</span>
+                <Monitor className="w-3 h-3" />
+                <span className="hidden md:inline">Browser Preview Mode</span>
+              </span>
+            )}
+
+            {/* Subtle contextual AI status indicator */}
+            {hasApiKey ? (
+              <button
+                onClick={() => { void promptApiKey(false).catch(() => undefined); }}
+                title="Gemini AI Aktif (Klik untuk ubah API Key)"
+                aria-label="Gemini AI aktif. Klik untuk ubah API Key"
+                className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">AI Aktif</span>
               </button>
-            </div>
-          </header>
-        )}
+            ) : (
+              <button
+                onClick={() => { void promptApiKey(false).catch(() => undefined); }}
+                title="Klik untuk mengaktifkan Gemini AI"
+                aria-label="Aktifkan Gemini AI"
+                className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/20 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span className="hidden sm:inline">AI Belum Diaktifkan</span>
+              </button>
+            )}
+          </div>
+        </header>
 
         <main className="flex-1 overflow-y-auto bg-background/50 relative">
           <Routes>
@@ -324,7 +312,9 @@ function AppContent() {
 export default function App() {
   return (
     <BrandingProvider>
-      <AppContent />
+      <ProjectProvider>
+        <AppContent />
+      </ProjectProvider>
     </BrandingProvider>
   );
 }

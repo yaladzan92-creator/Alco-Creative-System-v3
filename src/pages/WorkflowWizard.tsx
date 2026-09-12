@@ -16,8 +16,6 @@ import {
   Zap,
   Palette,
   ShieldCheck,
-  PanelLeftClose,
-  PanelLeftOpen,
   ArrowLeft,
   Edit3
 } from "lucide-react";
@@ -44,159 +42,14 @@ import BrandFoundationStep from "@/components/workflow/BrandFoundationStep";
 import AdsContentStep from "@/components/workflow/AdsContentStep";
 import ProductEntryGateway from "@/components/workflow/ProductEntryGateway";
 import CampaignSummaryPanel from "@/components/workflow/CampaignSummaryPanel";
-
-const STEPS = [
-  { 
-    id: 1, 
-    title: "1. Riset Niche & Produk", 
-    shortTitle: "Riset Niche", 
-    purpose: "Menentukan produk digital spesifik dan ceruk pasar sasaran berdaya beli tinggi.",
-    whyImportant: "Memilih pasar potensial agar promosi tepat sasaran & berkonversi tinggi.",
-    icon: Search, color: "text-blue-500", bg: "bg-blue-500/10" 
-  },
-  { 
-    id: 2, 
-    title: "2. Target Audiens & Persona", 
-    shortTitle: "Target Audiens", 
-    purpose: "Membedah profil, demografi, dan perilaku calon pembeli ideal.",
-    whyImportant: "Memahami emosi calon pembeli agar pesan iklan terasa sangat personal.",
-    icon: Users, color: "text-purple-500", bg: "bg-purple-500/10" 
-  },
-  { 
-    id: 3, 
-    title: "3. Masalah & Pain Point", 
-    shortTitle: "Masalah Audiens", 
-    purpose: "Memetakan masalah mendalam & pemicu emosional terkuat pembeli.",
-    whyImportant: "Masalah mendalam adalah alasan utama orang membeli solusi Anda.",
-    icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10" 
-  },
-  { 
-    id: 4, 
-    title: "4. Validasi Potensi Pasar", 
-    shortTitle: "Validasi Pasar", 
-    purpose: "Memvalidasi minat beli pasar sebelum mengeluarkan modal iklan.",
-    whyImportant: "Memastikan calon pembeli siap bertransaksi sebelum promosi skala besar.",
-    icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" 
-  },
-  { 
-    id: 5, 
-    title: "5. Positioning & Janji Utama", 
-    shortTitle: "Positioning", 
-    purpose: "Merumuskan keunikan produk & janji nilai pembeda dari kompetitor.",
-    whyImportant: "Tampil unik & menonjol dibanding produk lain di pasar.",
-    icon: Target, color: "text-amber-500", bg: "bg-amber-500/10" 
-  },
-  { 
-    id: 6, 
-    title: "6. Paket Penawaran (Offer)", 
-    shortTitle: "Paket Penawaran", 
-    purpose: "Menyusun promo penawaran & bonus bernilai tinggi yang menarik.",
-    whyImportant: "Penawaran yang menggiurkan melipatgandakan tingkat konversi penjualan.",
-    icon: Gift, color: "text-pink-500", bg: "bg-pink-500/10" 
-  },
-  { 
-    id: 7, 
-    title: "7. Sudut Pandang (Angle) Iklan", 
-    shortTitle: "Sudut Iklan", 
-    purpose: "Merancang variasi pemicu psikologis daya pancing klik iklan Meta Ads.",
-    whyImportant: "Angle iklan yang kuat menghemat budget & menaikkan rasio klik (CTR).",
-    icon: TrendingUp, color: "text-indigo-500", bg: "bg-indigo-500/10" 
-  },
-  { 
-    id: 8, 
-    title: "8. Naskah Copywriting Ads", 
-    shortTitle: "Copywriting", 
-    purpose: "Menghasilkan naskah iklan lengkap (Headline, Naskah Utama, dan Call to Action).",
-    whyImportant: "Copywriting yang tepat mendorong pembeli untuk langsung bertindak.",
-    icon: FileText, color: "text-orange-500", bg: "bg-orange-500/10" 
-  },
-  { 
-    id: 9, 
-    title: "9. Pondasi Brand & Visual", 
-    shortTitle: "Pondasi Brand", 
-    purpose: "Menetapkan identitas, tone suara, dan gaya komunikasi khas brand.",
-    whyImportant: "Membangun kepercayaan dan kredibilitas jangka panjang bagi brand Anda.",
-    icon: Palette, color: "text-violet-500", bg: "bg-violet-500/10" 
-  },
-  { 
-    id: 10, 
-    title: "10. Materi Iklan Meta Ads", 
-    shortTitle: "Materi Iklan", 
-    purpose: "Menghasilkan materi visual iklan, video ads dengan karakter, carousel, dan landing page.",
-    whyImportant: "Seluruh materi promosi siap pakai untuk langsung dipasang di Meta Ads.",
-    icon: Zap, color: "text-cyan-500", bg: "bg-cyan-500/10" 
-  },
-];
-
-const getStepStatus = (stepId: number, proj: any) => {
-  if (!proj) return { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-
-  switch (stepId) {
-    case 1:
-      return proj?.nicheData?.selectedOption 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.nicheData?.input?.interest 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 2:
-      return proj?.audienceData?.selectedPersona 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.audienceData?.input?.topPain 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 3:
-      return proj?.painPointData?.selectedOption 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.painPointData?.input?.extraContext 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 4:
-      return proj?.validationData?.score 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.validationData?.input?.price 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 5:
-      return proj?.positioningData?.selectedPromise 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.positioningData?.input?.mainPromise 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 6:
-      return proj?.offerData?.selectedOffer 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.offerData?.input?.mainOffer 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 7:
-      return proj?.marketingAngles?.selectedAngles 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.marketingAngles?.input?.primaryAngle 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 8:
-      return proj?.copyDirection?.selectedCopy 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : proj?.copyDirection?.input?.headline 
-        ? { label: "Draf", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 9:
-      return proj?.brandFoundationData 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    case 10:
-      return (proj?.adsContentData || proj?.adsGeneratedAngles) 
-        ? { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" }
-        : { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-    default:
-      return { label: "Belum Diisi", color: "bg-secondary text-muted-foreground border-border" };
-  }
-};
+import { WORKFLOW_STEPS as STEPS, getStepStatus } from "@/lib/workflowSteps";
+import { useProject } from "@/contexts/ProjectContext";
 
 export default function WorkflowWizard() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { activeProjectId, setActiveProjectId, setActiveProject } = useProject();
   const [project, setProject] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [activeStep, setActiveStep] = React.useState(1);
@@ -204,6 +57,14 @@ export default function WorkflowWizard() {
   const [showEntryGateway, setShowEntryGateway] = React.useState(false);
   const [showSummaryDrawer, setShowSummaryDrawer] = React.useState(false);
   const { config } = useBranding();
+
+  const navigateToStep = (destStep: number) => {
+    const nextVal = Math.min(Math.max(destStep, 1), 10);
+    setActiveStep(nextVal);
+    if (projectId) {
+      navigate(`/wizard/${projectId}?step=${nextVal}`, { replace: true });
+    }
+  };
 
   // Ref for mobile step selector buttons to auto-scroll active step into view
   const stepButtonsRef = React.useRef<{ [key: number]: HTMLButtonElement | null }>({});
@@ -237,20 +98,6 @@ export default function WorkflowWizard() {
     }
   }, [searchParams]);
 
-  // Collapsible sidebar state (Desktop)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(() => {
-    const saved = localStorage.getItem("alco_wizard_sidebar_collapsed");
-    return saved === "true";
-  });
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(prev => {
-      const nextVal = !prev;
-      localStorage.setItem("alco_wizard_sidebar_collapsed", String(nextVal));
-      return nextVal;
-    });
-  };
-
   React.useEffect(() => {
     const fetchProjectAndCheckOwnership = async (currentUser: any) => {
       if (!projectId) {
@@ -268,6 +115,8 @@ export default function WorkflowWizard() {
           const data = docSnap.data();
           const normalized = normalizeProject({ ...data, id: projectId });
           setProject(normalized);
+          setActiveProjectId(projectId);
+          setActiveProject(normalized);
 
           if (!normalized.initialSetupCompleted || !normalized.productStatus) {
             setShowEntryGateway(true);
@@ -316,7 +165,7 @@ export default function WorkflowWizard() {
     return () => {
       unsubscribe();
     };
-  }, [projectId, navigate]);
+  }, [projectId, navigate, setActiveProjectId, setActiveProject]);
 
   const updateProjectData = async (stepKey: string, data: any, nextStep?: boolean) => {
     if (!projectId) return;
@@ -333,7 +182,7 @@ export default function WorkflowWizard() {
         if (activeStep < 10) {
           const nextVal = activeStep + 1;
           updates.currentStep = Math.max(prevStep, nextVal);
-          setActiveStep(nextVal);
+          navigateToStep(nextVal);
         }
       }
 
@@ -343,7 +192,9 @@ export default function WorkflowWizard() {
       updates.brandIntelligence = biUpdate;
       
       await updateDoc(docRef, updates);
-      setProject((prev: any) => ({ ...prev, ...updates }));
+      const updatedProj = { ...project, ...updates };
+      setProject(updatedProj);
+      setActiveProject(updatedProj);
     } catch (error) {
       console.error(error);
       toast.error("Gagal menyimpan progres");
@@ -361,7 +212,9 @@ export default function WorkflowWizard() {
       updates.brandIntelligence = biUpdate;
 
       await updateDoc(docRef, updates);
-      setProject((prev: any) => ({ ...prev, ...updates }));
+      const updatedProj = { ...project, ...updates };
+      setProject(updatedProj);
+      setActiveProject(updatedProj);
     } catch (error) {
        console.error(error);
     }
@@ -386,10 +239,12 @@ export default function WorkflowWizard() {
       updates.brandIntelligence = biUpdate;
 
       await updateDoc(docRef, updates);
-      setProject((prev: any) => ({ ...prev, ...updates }));
+      const updatedProj = { ...project, ...updates };
+      setProject(updatedProj);
+      setActiveProject(updatedProj);
       setShowEntryGateway(false);
       const destStep = payload.targetStep ? Math.min(Math.max(payload.targetStep, 1), 10) : 1;
-      setActiveStep(destStep);
+      navigateToStep(destStep);
       toast.success(destStep === 10 ? "Campaign Pack Siap!" : "Data Produk Disimpan!");
     } catch (err) {
       console.error(err);
@@ -522,27 +377,6 @@ export default function WorkflowWizard() {
         {/* Desktop Header Layout (>= 768px) */}
         <div className="hidden md:flex items-center justify-between gap-3 w-full">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Sidebar Toggle Button (Desktop) */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleSidebar}
-              title={isSidebarCollapsed ? "Buka Sidebar Langkah (Area Luas)" : "Tutup Sidebar Langkah"}
-              className="h-8 px-2.5 rounded-xl border border-border/70 hover:bg-secondary text-foreground text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              {isSidebarCollapsed ? (
-                <>
-                  <PanelLeftOpen className="w-4 h-4 text-primary" />
-                  <span className="text-[11px]">Buka Langkah</span>
-                </>
-              ) : (
-                <>
-                  <PanelLeftClose className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-[11px]">Tutup Langkah</span>
-                </>
-              )}
-            </Button>
-
             {/* Brand / Project Name Link to Dashboard */}
             <div className="flex items-center gap-2 min-w-0">
               <Button
@@ -627,7 +461,7 @@ export default function WorkflowWizard() {
               key={step.id}
               ref={(el) => { stepButtonsRef.current[step.id] = el; }}
               disabled={!isAccessible}
-              onClick={() => isAccessible && setActiveStep(step.id)}
+              onClick={() => isAccessible && navigateToStep(step.id)}
               className={cn(
                 "px-2.5 py-1 rounded-lg font-bold whitespace-nowrap text-[10px] flex items-center gap-1 transition-all shrink-0 cursor-pointer",
                 isActive 
@@ -644,80 +478,11 @@ export default function WorkflowWizard() {
         })}
       </div>
 
-      {/* Main Body: Collapsible Sidebar + Expansive Workspace */}
+      {/* Main Body: Expansive Workspace */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Navigation Sidebar: Unified 10-Step Journey (Desktop) */}
-        {!isSidebarCollapsed && (
-          <aside className="hidden md:flex w-72 lg:w-80 border-r border-border/80 bg-card/60 flex-col overflow-y-auto shrink-0 transition-all duration-200">
-            <div className="p-4 flex-1 space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Alur 10 Langkah</span>
-                <span className="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded-full">
-                  Step {activeStep}/10
-                </span>
-              </div>
-              
-              <div className="space-y-1.5">
-                {STEPS.map((step) => {
-                  const Icon = step.icon;
-                  const isActive = activeStep === step.id;
-                  const isCompleted = activeStep > step.id;
-                  const isAccessible = step.id <= (project?.currentStep || 1);
-                  
-                  return (
-                    <div 
-                      key={step.id}
-                      onClick={() => isAccessible && setActiveStep(step.id)}
-                      className={cn(
-                        "flex flex-col gap-0.5 p-2.5 rounded-xl cursor-pointer transition-all border text-left",
-                        isActive 
-                          ? "bg-primary text-white border-primary shadow-sm" 
-                          : isCompleted 
-                          ? "bg-secondary/40 text-foreground border-border hover:border-primary/30" 
-                          : isAccessible 
-                          ? "bg-card text-foreground border-border/60 hover:border-primary/20" 
-                          : "opacity-40 grayscale border-transparent pointer-events-none"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-[10px]",
-                          isActive ? "bg-white/20 text-white" : `${step.bg} ${step.color}`
-                        )}>
-                          <Icon className="w-3 h-3" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn("text-[11px] font-bold truncate", isActive ? "text-white" : "text-foreground")}>
-                            {step.title}
-                          </p>
-                        </div>
-                        {isCompleted && !isActive && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
-                      </div>
-                      <p className={cn("text-[9px] leading-tight pl-7 line-clamp-1", isActive ? "text-white/80" : "text-muted-foreground")}>
-                        {step.whyImportant}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            
-            {/* Auto-Sync Footnote in Sidebar */}
-            <div className="p-3.5 bg-secondary/30 border-t border-border mt-auto">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Sparkles className="w-3 h-3 text-primary" />
-                <span className="text-[9px] font-bold uppercase tracking-wider text-foreground">Sinkron Otomatis</span>
-              </div>
-              <p className="text-[9px] text-muted-foreground leading-relaxed font-medium">
-                Setiap hasil langkah yang disetujui otomatis menjadi acuan untuk langkah berikutnya.
-              </p>
-            </div>
-          </aside>
-        )}
-
-        {/* Workspace Main Area - Expands when sidebar is collapsed */}
+        {/* Workspace Main Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
-          <div className={cn("mx-auto space-y-6 transition-all duration-200", isSidebarCollapsed ? "max-w-6xl" : "max-w-4xl")}>
+          <div className="max-w-5xl mx-auto space-y-6 transition-all duration-200">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeStep}
@@ -781,7 +546,7 @@ export default function WorkflowWizard() {
                     <Button 
                       variant="outline" 
                       disabled={activeStep === 1}
-                      onClick={() => setActiveStep(prev => Math.max(1, prev - 1))}
+                      onClick={() => navigateToStep(Math.max(1, activeStep - 1))}
                       className="rounded-xl font-bold gap-1.5 text-xs h-9 cursor-pointer shrink-0"
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -790,7 +555,7 @@ export default function WorkflowWizard() {
                     
                     {activeStep < (project?.currentStep || 1) && activeStep < 10 ? (
                       <Button 
-                        onClick={() => setActiveStep(prev => Math.min(10, prev + 1))}
+                        onClick={() => navigateToStep(Math.min(10, activeStep + 1))}
                         className="rounded-xl bg-primary text-white hover:bg-primary/95 font-bold gap-1.5 px-4 sm:px-5 text-xs h-9 shadow-sm cursor-pointer truncate"
                       >
                         <span>Lanjut ke Step {activeStep + 1}</span>
@@ -817,7 +582,7 @@ export default function WorkflowWizard() {
               project={project}
               activeStep={activeStep}
               onNavigateStep={(s) => {
-                setActiveStep(s);
+                navigateToStep(s);
                 setShowSummaryDrawer(false);
               }}
               onCloseMobile={() => setShowSummaryDrawer(false)}

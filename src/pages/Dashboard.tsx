@@ -35,6 +35,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "../lib/utils";
 import { useBranding } from "@/contexts/BrandingContext";
+import { useProject } from "@/contexts/ProjectContext";
 import { saveUserConfig, getUserConfig } from "../services/aiService";
 import { normalizeProject } from "@/lib/projectSchema";
 import { downloadEcosystemBlueprint } from "@/lib/ecosystemBlueprint";
@@ -164,6 +165,7 @@ export default function Dashboard() {
   const user = auth.currentUser;
   const navigate = useNavigate();
   const { config } = useBranding();
+  const { activeProjectId, setActiveProjectId, setActiveProject } = useProject();
   const [projects, setProjects] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [creating, setCreating] = React.useState(false);
@@ -377,11 +379,16 @@ export default function Dashboard() {
       const metaObj: any = import.meta;
       const baseUrl =
         localStorage.getItem("alco_content_engine_url") ||
-        metaObj.env?.VITE_ALCO_CONTENT_ENGINE_URL ||
-        "https://ai.studio/apps/b61328f3-5e01-4ba3-bc60-9c93a9475ba4";
+        metaObj.env?.VITE_ALCO_CONTENT_ENGINE_URL;
 
-      const separator = baseUrl.includes("?") ? "&" : "?";
-      window.open(`${baseUrl}${separator}handoff=${encodeURIComponent(handoff)}&source=creative-system`, "_blank", "noopener,noreferrer");
+      if (baseUrl) {
+        const separator = baseUrl.includes("?") ? "&" : "?";
+        window.open(`${baseUrl}${separator}handoff=${encodeURIComponent(handoff)}&source=creative-system`, "_blank", "noopener,noreferrer");
+      } else {
+        toast.info("ALCO Content Engine adalah aplikasi desktop terpisah.", {
+          description: "Gunakan tombol 'Download Blueprint Content Engine' untuk mengimpor strategi proyek ini ke aplikasi Content Engine (kelola via ALCO Hub)."
+        });
+      }
     } catch (err) {
       console.error(err);
       toast.error("Gagal membuka Content Engine untuk proyek ini.");
@@ -476,12 +483,25 @@ export default function Dashboard() {
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setProjects(data);
+
+      if (data.length > 0) {
+        const found = activeProjectId ? data.find((p: any) => p.id === activeProjectId) : null;
+        if (found) {
+          setActiveProject(found);
+        } else {
+          setActiveProjectId(data[0].id);
+          setActiveProject(data[0]);
+        }
+      } else {
+        setActiveProjectId(null);
+        setActiveProject(null);
+      }
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, activeProjectId, setActiveProjectId, setActiveProject]);
 
   React.useEffect(() => {
     fetchProjects();
@@ -519,6 +539,16 @@ export default function Dashboard() {
     if (!confirm(`Apakah Anda yakin ingin menghapus proyek "${projectName}"?`)) return;
     try {
       await deleteDoc(doc(db, "projects", projectId));
+      if (projectId === activeProjectId) {
+        const remaining = projects.filter(p => p.id !== projectId);
+        if (remaining.length > 0) {
+          setActiveProjectId(remaining[0].id);
+          setActiveProject(remaining[0]);
+        } else {
+          setActiveProjectId(null);
+          setActiveProject(null);
+        }
+      }
       toast.success("Proyek berhasil dihapus.");
       fetchProjects();
     } catch (error) {
@@ -593,6 +623,7 @@ export default function Dashboard() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      setActiveProjectId(docRef.id);
       toast.success("Proyek Baru Berhasil Dibuat");
       navigate(`/wizard/${docRef.id}`);
     } catch (error) {
