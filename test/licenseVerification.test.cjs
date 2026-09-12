@@ -349,26 +349,50 @@ try {
 }
 assert(browserPreviewSafe, 'Test 20: browser preview tidak crash saat running tanpa electron bridge');
 
-// 21. getEffectivePublicKey prioritas: Environment variable jika valid
+// 21. Built-in Public Key dari licenseAuthority.cjs valid dan tepat 64 hex non-zero
+const authority = require('../electron/licenseAuthority.cjs');
+assert(
+  typeof authority.ALCO_LICENSE_PUBLIC_KEY === 'string' &&
+  authority.ALCO_LICENSE_PUBLIC_KEY.length === 64 &&
+  /^[0-9a-fA-F]{64}$/.test(authority.ALCO_LICENSE_PUBLIC_KEY) &&
+  !/^0{64}$/.test(authority.ALCO_LICENSE_PUBLIC_KEY) &&
+  authority.ALCO_LICENSE_PUBLIC_KEY === '7a8e99b9ba45bc9f8847bc9fc4952a87b7fa22a3b0c09a5b22ed939de0ed5162',
+  'Test 21: built-in Public Key resmi valid dan berformat 64 karakter hex non-zero'
+);
+
+// 22. Built-in Public Key digunakan saat env kosong / undefined
 const originalEnv = process.env.ALCO_LICENSE_PUBLIC_KEY;
 try {
+  delete process.env.ALCO_LICENSE_PUBLIC_KEY;
+  const effectiveDefault = getEffectivePublicKey();
+  assert(
+    effectiveDefault === '7a8e99b9ba45bc9f8847bc9fc4952a87b7fa22a3b0c09a5b22ed939de0ed5162',
+    'Test 22: built-in Public Key resmi digunakan saat environment variable kosong/tidak diset'
+  );
+
+  // 23. Environment variable valid tetap menjadi prioritas 1 (override untuk dev/test)
   process.env.ALCO_LICENSE_PUBLIC_KEY = rawPubHex;
   const effectiveFromEnv = getEffectivePublicKey();
-  assert(effectiveFromEnv === rawPubHex, 'Test 21: getEffectivePublicKey membaca valid env var');
+  assert(
+    effectiveFromEnv === rawPubHex,
+    'Test 23: environment variable valid tetap menjadi prioritas override'
+  );
 
-  // 22. Jika env var tidak valid (zero key / malformed), fail-closed jika built-in kosong
-  process.env.ALCO_LICENSE_PUBLIC_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
-  const effectiveZeroEnv = getEffectivePublicKey();
-  assert(effectiveZeroEnv === null, 'Test 22: zero key di env var ditolak dan fail-closed jika built-in kosong');
+  // 24. Explicit override key: zero key dan malformed key ditolak (fail-closed)
+  const zeroRes = getEffectivePublicKey('0000000000000000000000000000000000000000000000000000000000000000');
+  const malformedRes = getEffectivePublicKey('not-a-valid-key');
+  assert(
+    zeroRes === null && malformedRes === null,
+    'Test 24: zero key dan malformed key ditolak secara fail-closed'
+  );
 
-  // 23. Override key explicit tetap dihormati
-  const overrideRes = getEffectivePublicKey('1234');
-  assert(overrideRes === null, 'Test 23: malformed override key ditolak (fail-closed)');
-
-  // 24. Verifikasi lisensi tanpa parameter ke-3 saat env var valid
+  // 25. Verifikasi lisensi mencapai LICENSE_VALID ketika signature cocok (menggunakan effective public key)
   process.env.ALCO_LICENSE_PUBLIC_KEY = rawPubHex;
-  const resNoThirdParam = verifyLicenseString(key6, currentDeviceId);
-  assert(resNoThirdParam.status === STATUS_CODES.LICENSE_VALID, 'Test 24: verifikasi lisensi berhasil menggunakan public key dari config/env tanpa passing manual');
+  const resValid = verifyLicenseString(key6, currentDeviceId);
+  assert(
+    resValid.status === STATUS_CODES.LICENSE_VALID,
+    'Test 25: valid license mencapai LICENSE_VALID ketika signature cocok'
+  );
 } finally {
   if (originalEnv !== undefined) {
     process.env.ALCO_LICENSE_PUBLIC_KEY = originalEnv;

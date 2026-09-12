@@ -16,8 +16,8 @@
  *    dengan status CONFIGURATION_ERROR.
  */
 
-// Paste the 64-character hex public key from ALCO License Generator here:
-const ALCO_LICENSE_PUBLIC_KEY = '';
+// Official ALCO License Generator Authority Public Key (Ed25519 32-byte raw hex):
+const ALCO_LICENSE_PUBLIC_KEY = '7a8e99b9ba45bc9f8847bc9fc4952a87b7fa22a3b0c09a5b22ed939de0ed5162';
 
 module.exports = {
   ALCO_LICENSE_PUBLIC_KEY,
