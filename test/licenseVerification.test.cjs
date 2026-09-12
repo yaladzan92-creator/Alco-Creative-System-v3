@@ -349,6 +349,34 @@ try {
 }
 assert(browserPreviewSafe, 'Test 20: browser preview tidak crash saat running tanpa electron bridge');
 
+// 21. getEffectivePublicKey prioritas: Environment variable jika valid
+const originalEnv = process.env.ALCO_LICENSE_PUBLIC_KEY;
+try {
+  process.env.ALCO_LICENSE_PUBLIC_KEY = rawPubHex;
+  const effectiveFromEnv = getEffectivePublicKey();
+  assert(effectiveFromEnv === rawPubHex, 'Test 21: getEffectivePublicKey membaca valid env var');
+
+  // 22. Jika env var tidak valid (zero key / malformed), fail-closed jika built-in kosong
+  process.env.ALCO_LICENSE_PUBLIC_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
+  const effectiveZeroEnv = getEffectivePublicKey();
+  assert(effectiveZeroEnv === null, 'Test 22: zero key di env var ditolak dan fail-closed jika built-in kosong');
+
+  // 23. Override key explicit tetap dihormati
+  const overrideRes = getEffectivePublicKey('1234');
+  assert(overrideRes === null, 'Test 23: malformed override key ditolak (fail-closed)');
+
+  // 24. Verifikasi lisensi tanpa parameter ke-3 saat env var valid
+  process.env.ALCO_LICENSE_PUBLIC_KEY = rawPubHex;
+  const resNoThirdParam = verifyLicenseString(key6, currentDeviceId);
+  assert(resNoThirdParam.status === STATUS_CODES.LICENSE_VALID, 'Test 24: verifikasi lisensi berhasil menggunakan public key dari config/env tanpa passing manual');
+} finally {
+  if (originalEnv !== undefined) {
+    process.env.ALCO_LICENSE_PUBLIC_KEY = originalEnv;
+  } else {
+    delete process.env.ALCO_LICENSE_PUBLIC_KEY;
+  }
+}
+
 console.log('\n===================================================');
 console.log(`TEST SUMMARY: ${testPassedCount} / ${testTotalCount} PASSED`);
 console.log('===================================================');

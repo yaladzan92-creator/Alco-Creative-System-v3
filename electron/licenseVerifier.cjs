@@ -35,23 +35,68 @@ const STATUS_CODES = {
 const ALLOWED_PLANS = ['starter', 'pro', 'enterprise', 'custom'];
 
 /**
- * Validates whether a public key string is configured and valid (non-zero 64 hex chars)
+ * Reads the built-in production public key from licenseAuthority.cjs
  */
-function getEffectivePublicKey(overrideKey) {
-  const key = overrideKey !== undefined ? overrideKey : process.env.ALCO_LICENSE_PUBLIC_KEY;
+function getAuthorityPublicKey() {
+  try {
+    const authority = require('./licenseAuthority.cjs');
+    if (authority && typeof authority.ALCO_LICENSE_PUBLIC_KEY === 'string') {
+      return authority.ALCO_LICENSE_PUBLIC_KEY.trim();
+    }
+  } catch (_) {}
+  return '';
+}
+
+/**
+ * Validates whether a public key string is a valid non-zero 64-hex Ed25519 raw public key.
+ */
+function isValidPublicKeyFormat(key) {
   if (!key || typeof key !== 'string') {
-    return null;
+    return false;
   }
   const trimmed = key.trim();
   // Must be exactly 64 hex characters (32 bytes raw Ed25519 public key)
   if (trimmed.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    return null;
+    return false;
   }
   // Zero key (all zeros) is strictly disallowed
   if (/^0{64}$/.test(trimmed)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Validates whether a public key string is configured and valid (non-zero 64 hex chars).
+ * 
+ * Order of priority:
+ * 1. Explicit overrideKey (if provided, e.g. for testing/isolated verification)
+ * 2. Environment variable ALCO_LICENSE_PUBLIC_KEY (if valid)
+ * 3. Built-in production Public Key from licenseAuthority.cjs (if valid)
+ * 4. Otherwise fail-closed -> returns null (triggers CONFIGURATION_ERROR)
+ */
+function getEffectivePublicKey(overrideKey) {
+  if (overrideKey !== undefined) {
+    if (isValidPublicKeyFormat(overrideKey)) {
+      return overrideKey.trim();
+    }
     return null;
   }
-  return trimmed;
+
+  // Priority 1: Environment variable if valid
+  const envKey = process.env.ALCO_LICENSE_PUBLIC_KEY;
+  if (isValidPublicKeyFormat(envKey)) {
+    return envKey.trim();
+  }
+
+  // Priority 2: Built-in production Public Key from licenseAuthority.cjs
+  const authorityKey = getAuthorityPublicKey();
+  if (isValidPublicKeyFormat(authorityKey)) {
+    return authorityKey.trim();
+  }
+
+  // Priority 3: Fail-closed if neither is configured or valid
+  return null;
 }
 
 /**
@@ -476,35 +521,52 @@ function verifyEd25519Signature(canonicalDataStr, signatureHex, publicKeyHex) {
 }
 
 /**
+ * Minimal safe logging for license verification status
+ * Strictly logs only the status code, never sensitive keys, payloads, or signatures.
+ */
+function logLicenseVerification(status) {
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(`[License] verification status=${status}`);
+  }
+}
+
+/**
  * Full Strict License Verification
  */
 function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex) {
+  const finishVerify = (result) => {
+    if (result && result.status) {
+      logLicenseVerification(result.status);
+    }
+    return result;
+  };
+
   if (!rawLicenseKey || typeof rawLicenseKey !== 'string') {
-    return { status: STATUS_CODES.NO_LICENSE, error: 'Lisensi belum dimasukkan.' };
+    return finishVerify({ status: STATUS_CODES.NO_LICENSE, error: 'Lisensi belum dimasukkan.' });
   }
 
   const trimmed = rawLicenseKey.trim();
   if (trimmed.length === 0) {
-    return { status: STATUS_CODES.NO_LICENSE, error: 'Lisensi belum dimasukkan.' };
+    return finishVerify({ status: STATUS_CODES.NO_LICENSE, error: 'Lisensi belum dimasukkan.' });
   }
 
   if (trimmed.length > 10000) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Ukuran lisensi melebihi batas.' };
+    return finishVerify({ status: STATUS_CODES.MALFORMED_LICENSE, error: 'Ukuran lisensi melebihi batas.' });
   }
 
   const parts = trimmed.split('.');
   if (parts.length !== 3) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Format lisensi tidak valid (harus 3 bagian: ALCO-LIC-v1.<payload>.<sig>).' };
+    return finishVerify({ status: STATUS_CODES.MALFORMED_LICENSE, error: 'Format lisensi tidak valid (harus 3 bagian: ALCO-LIC-v1.<payload>.<sig>).' });
   }
 
   const [headerPrefix, payloadB64Url, signatureHex] = parts;
 
   if (headerPrefix !== 'ALCO-LIC-v1') {
-    return { status: STATUS_CODES.UNSUPPORTED_LICENSE_VERSION, error: 'Prefix lisensi tidak dikenali.' };
+    return finishVerify({ status: STATUS_CODES.UNSUPPORTED_LICENSE_VERSION, error: 'Prefix lisensi tidak dikenali.' });
   }
 
   if (!signatureHex || signatureHex.length !== 128 || !/^[0-9a-fA-F]{128}$/.test(signatureHex)) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Signature lisensi tidak valid (harus 128 karakter hex).' };
+    return finishVerify({ status: STATUS_CODES.MALFORMED_LICENSE, error: 'Signature lisensi tidak valid (harus 128 karakter hex).' });
   }
 
   let payloadObj = null;
@@ -512,27 +574,27 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex) {
     const jsonStr = Buffer.from(payloadB64Url, 'base64url').toString('utf-8');
     payloadObj = JSON.parse(jsonStr);
   } catch (err) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal membaca payload lisensi.' };
+    return finishVerify({ status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal membaca payload lisensi.' });
   }
 
   // Validate payload against official schema
   const schemaValidation = validateLicensePayloadSchema(payloadObj);
   if (!schemaValidation.valid) {
-    return { status: schemaValidation.code, error: schemaValidation.error };
+    return finishVerify({ status: schemaValidation.code, error: schemaValidation.error });
   }
 
   // Verify device binding
   if (payloadObj.deviceId !== currentDeviceId) {
-    return { status: STATUS_CODES.WRONG_DEVICE, error: 'Lisensi ini terikat untuk perangkat lain.' };
+    return finishVerify({ status: STATUS_CODES.WRONG_DEVICE, error: 'Lisensi ini terikat untuk perangkat lain.' });
   }
 
   // Public key verification - fail closed if unconfigured or zero key
   const effectivePublicKey = getEffectivePublicKey(publicKeyHex);
   if (!effectivePublicKey) {
-    return {
+    return finishVerify({
       status: STATUS_CODES.CONFIGURATION_ERROR,
       error: 'Public key verifikasi lisensi belum dikonfigurasi (ALCO_LICENSE_PUBLIC_KEY tidak ditemukan atau masih default zero key). Hubungi Aladzan Corpora.',
-    };
+    });
   }
 
   // Signature verification using canonical payload bytes
@@ -540,19 +602,19 @@ function verifyLicenseString(rawLicenseKey, currentDeviceId, publicKeyHex) {
   try {
     canonicalStr = canonicalizeJSON(payloadObj);
   } catch (err) {
-    return { status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal melakukan kanonikalisasi payload lisensi.' };
+    return finishVerify({ status: STATUS_CODES.MALFORMED_LICENSE, error: 'Gagal melakukan kanonikalisasi payload lisensi.' });
   }
 
   const isSigValid = verifyEd25519Signature(canonicalStr, signatureHex, effectivePublicKey);
   if (!isSigValid) {
-    return { status: STATUS_CODES.INVALID_SIGNATURE, error: 'Tanda tangan digital (signature) lisensi tidak valid atau telah dimodifikasi.' };
+    return finishVerify({ status: STATUS_CODES.INVALID_SIGNATURE, error: 'Tanda tangan digital (signature) lisensi tidak valid atau telah dimodifikasi.' });
   }
 
-  return {
+  return finishVerify({
     status: STATUS_CODES.LICENSE_VALID,
     payload: payloadObj,
     checkedAt: new Date().toISOString(),
-  };
+  });
 }
 
 /**

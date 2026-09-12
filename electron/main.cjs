@@ -80,7 +80,9 @@ function stopServerProcess() {
 // Register IPC handlers for ALCO License System
 ipcMain.handle('alco-license-get-status', async () => {
   const userDataDir = app.getPath('userData');
-  return evaluateStoredLicense(userDataDir);
+  const result = evaluateStoredLicense(userDataDir);
+  writeStartupLog(`[License] evaluation status=${result.status}`);
+  return result;
 });
 
 ipcMain.handle('alco-license-get-device-id', async () => {
@@ -94,12 +96,16 @@ ipcMain.handle('alco-license-get-request-code', async (_event, options = {}) => 
 
 ipcMain.handle('alco-license-activate', async (_event, licenseKey) => {
   const userDataDir = app.getPath('userData');
-  return saveLicenseKey(userDataDir, licenseKey);
+  const result = saveLicenseKey(userDataDir, licenseKey);
+  writeStartupLog(`[License] verification status=${result.status}`);
+  return result;
 });
 
 ipcMain.handle('alco-license-remove', async () => {
   const userDataDir = app.getPath('userData');
-  return removeStoredLicense(userDataDir);
+  const result = removeStoredLicense(userDataDir);
+  writeStartupLog(`[License] remove status=${result.status}`);
+  return result;
 });
 
 function getFreePort(callback) {
